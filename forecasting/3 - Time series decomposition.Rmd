@@ -1,0 +1,192 @@
+---
+title: 'Ch 3: Time series decomposition'
+author: "Kevin. T"
+date: '2022-03-29'
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(fpp3)
+library(forecast)
+library(tibble)
+library(tsibble)
+library(fabletools)
+library(ggplot2)
+```
+
+## Transormations and adjustments
+*Per capita adjustments*
+```{r}
+global_economy %>%
+filter(Country == "Australia") %>%
+autoplot(GDP)
+```
+\newpage 
+```{r}
+global_economy %>%
+filter(Country == "Australia") %>%
+autoplot(GDP / Population)
+```
+*Inflation adjustments* 
+```{r}
+print_retail <- aus_retail %>%
+filter(Industry == "Newspaper and book retailing") %>%
+group_by(Industry) %>%
+index_by(Year = year(Month)) %>%
+summarise(Turnover = sum(Turnover))
+
+aus_economy <- global_economy %>%
+filter(Code == "AUS")
+
+print_retail %>%
+left_join(aus_economy, by = "Year") %>%
+mutate(Adjusted_turnover = Turnover / CPI*100) %>%
+pivot_longer(c(Turnover, Adjusted_turnover),
+names_to = "Type", values_to = "AUD") %>%
+mutate(Type = factor(Type, levels=c("Turnover","Adjusted_turnover"))) %>%
+ggplot(aes(x = Year, y = AUD)) +
+geom_line() +
+facet_grid(Type ~ ., scales = "free_y") +
+labs(title = "Turnover: Australian print media industry", y = "$AU") 
+```
+*Mathematical Transformations*
+```{r}
+food <- aus_retail %>%
+filter(Industry == "Food retailing") %>%
+summarise(Turnover = sum(Turnover))
+
+food %>% autoplot(sqrt(Turnover)) +
+labs(y = "Square root turnover")
+
+food %>% autoplot(log(Turnover)) +
+labs(y = "Log turnover")
+
+food %>% autoplot(-1/Turnover) +
+labs(y = "Inverse turnover")
+```
+*Box-Cox Transformations*
+```{r}
+food %>%
+features(Turnover, features = guerrero)
+
+food %>% autoplot(box_cox(Turnover, 0.0524)) +
+labs(y = "Box-Cox transformed turnover")
+```
+
+## Time series decomposition
+
+```{r}
+us_retail_employment <- us_employment %>%
+filter(year(Month) >= 1990, Title == "Retail Trade") %>%
+select(-Series_ID)
+us_retail_employment
+
+us_retail_employment %>%
+autoplot(Employed) +
+labs(y="Persons (thousands)", title="Total employment in US retail")
+
+us_retail_employment %>%
+model(stl = STL(Employed))
+
+dcmp <- us_retail_employment %>%
+model(stl = STL(Employed))
+components(dcmp)
+
+us_retail_employment %>%
+autoplot(Employed, color='gray') +
+autolayer(components(dcmp), trend, color='#D55E00') +
+labs(y="Persons (thousands)", title="Total employment in US retail")
+
+components(dcmp) %>% autoplot()
+components(dcmp) %>% gg_subseries(season_year)
+```
+*Seasonal adjustment *
+```{r}
+us_retail_employment %>%
+autoplot(Employed, color='gray') +
+autolayer(components(dcmp), season_adjust, color='#0072B2') +
+labs(y="Persons (thousands)", title="Total employment in US retail")
+```
+
+## Moving averages
+```{r}
+global_economy %>% filter(Country == "Australia") %>%
+autoplot(Exports) +
+labs(y="% of GDP", title= "Total Australian exports")
+```
+*Moving average trend-cycle *
+```{r}
+us_retail_employment_ma <- us_retail_employment %>%
+mutate(
+`12-MA` = slider::slide_dbl(Employed, mean,
+.before = 5, .after = 6, .complete = TRUE),
+`2x12-MA` = slider::slide_dbl(`12-MA`, mean,
+.before = 1, .after = 0, .complete = TRUE)
+)
+us_retail_employment_ma %>%
+autoplot(Employed, color = "gray") +
+autolayer(us_retail_employment_ma, vars(`2x12-MA`),
+color = "#D55E00") +
+labs(y = "Persons (thousands)",
+title = "Total employment in US retail")
+```
+##Classical decomposition
+```{r}
+us_retail_employment %>%
+model(classical_decomposition(Employed, type = "additive")) %>%
+components() %>%
+autoplot() + xlab("Year") +
+ggtitle("Classical additive decomposition of total
+US retail employment")
+
+```
+*STL decomposition*
+
+```{r}
+us_retail_employment %>%
+model(STL(Employed ~ season(window=9), robust=TRUE)) %>%
+components() %>% autoplot() +
+labs(title = "STL decomposition: US retail employment")
+
+```
+
+```{r}
+us_retail_employment %>%
+model(STL(Employed ~ season(window=5))) %>%
+components()
+us_retail_employment %>%
+model(STL(Employed ~ trend(window=15) +
+season(window="periodic"),
+robust = TRUE)
+) %>% components()
+```
+
+```{r}
+us_retail_employment %>% model(STL(Employed)) %>%
+components() %>% autoplot()
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

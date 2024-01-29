@@ -1,0 +1,414 @@
+---
+title: "ETF3231/5231 Individual Assignment 4"
+author: "Kevin Tran 30631289"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval=TRUE, error=TRUE, cache=TRUE)
+library(fpp3)
+library(readr)
+```
+
+*Your aim in the first part of the assignment is to build an ARIMA model and use this to forecast. Recall the first step in ARIMA modelling is to stabilize the variance of your data. If you decided that your data required a transformation in the previous assignments you will be required to use the same transformation for what follows (unless you have a reason to change your mind - please do so if you think it is necessary).*
+```{r echo=FALSE, message=FALSE}
+# Read in and tidy up your data
+
+# First three rows contain metadata, read them in separately
+meta <- read_csv("IA_Data.csv", col_names = TRUE, n_max = 3)
+# meta
+
+# The data follows after the third row, we skip the metadata and read the data. 
+# Note: Skipping the first row skips the column names, we add them back from the
+#       metadata.
+dat <- read_csv("IA_Data.csv", 
+                # use column names from the metadata
+                col_names = colnames(meta),
+                # skip 4 rows as we also skip column names, specified above
+                skip = 4)
+
+# Make sure you select the column with your student ID
+my_series <- dat %>% 
+  # feel free to rename your series appropriately
+  rename(Month = "Student ID", Turnover ="30631289") %>%
+  select(Month, Turnover) %>% 
+  mutate(Month=yearmonth(Month)) %>% 
+  as_tsibble(index = Month)
+
+```
+
+## Question 1
+
+*Visually inspect your data and decide on the transformation and what differencing is required to achieve stationarity. Plot the data at every step and comment on each plot justifying your actions. (No more than 50 words per plot). (6 marks)*
+```{r}
+#Basic plot
+my_series %>%
+  autoplot(Turnover) +
+  labs(
+    title = "Turnover: Western Australia Department Stores ",
+    y = "$AU in millions"
+  )
+#Transformation
+my_series %>%
+  features(Turnover, features = guerrero) 
+
+my_series %>% autoplot(log(Turnover))
+
+my_series %>% autoplot(log(Turnover)  %>% 
+  difference(12))
+
+#Automatic difference selection
+my_series %>% mutate(log_turnover = log(Turnover)) %>%
+  features(log_turnover, unitroot_nsdiffs) 
+
+my_series %>% autoplot(log(Turnover)  %>% 
+  difference(12) %>% difference (1)) 
+
+```
+The time series illustrates that the variance of the seasonality pattern increases. Therefore, a transformation is useful to stabilise the variance. Using the Box-Cox test, we get a value of 0.02. Hence a log transformation is more appropriate. However, stationarity is still not achieved as it shows an upward trend.
+
+With the seasonal data, a seasonal difference of 12 is used first. But the time series is still not perfectly stationary as the variance is not constant. For instance, in the beginning of the time series the variance is larger than the variance at the end of the data. 
+
+Undergoing an automatic difference selection tells us first order differencing is required. Therefore, a difference of 1 is applied along with the seasonal difference to further enhance the stationary. Now the plot illustrates stationary clearly as it looks horizonal and now has a constant variance.
+
+\newpage
+## Question 2
+
+*Plot the ACF and PACF of the stationary data. Reading from these choose an appropriate ARIMA model. Make sure you justify your choice. (No more than 70 words in total – do not revise the theory – describe what you see in your plots and decide what ARIMA orders may be appropriate. Also note that it is highly likely that the ACF and PACF plots will be very messy. Do the best you can). (6 marks)*
+
+```{r}
+my_series %>%
+  gg_tsdisplay(log(Turnover) %>% difference(12) %>% difference(1), plot_type = 'partial')
+```
+The data has been transformed into log format, with seasonality difference and first-order differencing. By first observing the ACF plot and the non-seasonal lags, there are 2 spikes at lags 11 and 26. Hence a MA(2) model is considered. For the seasonal lag, there is a spike at lag 12. Hence a MA(1) model is considered. Therefore, one possible ARIMA model is (0,1,2)(0,1,1) based on just the ACF plot. 
+
+\newpage
+## Question 3
+
+*Check the whiteness of the residuals from the fitted ARIMA model. Based on these evaluate and if necessary review the ARIMA model specified in Q2. (No more than 50 words). (4 marks)*
+
+```{r}
+fit <- my_series %>%
+  model(
+    arima012011 = ARIMA(log(Turnover) ~ pdq(0,1,2) + PDQ(0,1,1))
+  )
+
+fit %>%
+  select(arima012011) %>%
+  gg_tsresiduals()
+
+
+```
+The residuals illustrate a heteroskedastic pattern. The histogram illustrates the distributions is normal with an outlier in the left tail. The ACF plot shows couple of small significant lags There is not a lot of white noise overall. Hence the ARIMA model could be a good fit. 
+
+
+\newpage
+## Question 4
+
+*Consider three (up to five if you think you need them) alternative ARIMA models based on your choice in Q2 and Q3. (Very briefly justify each choice with no more than 1 or 2 lines each). Use information criteria to choose the best model you have considered so far. (6 marks)*
+
+```{r}
+fit_all <- my_series %>%
+  model(
+    arima012011 = ARIMA(log(Turnover) ~ pdq(0,1,2) + PDQ(0,1,1)),
+    arima310011 = ARIMA(log(Turnover) ~ pdq(3,1,0) + PDQ(0,1,1)),
+    arima110011 = ARIMA(log(Turnover) ~ pdq(1,1,0) + PDQ(0,1,1)),
+    arima013011 = ARIMA(log(Turnover) ~ pdq(3,1,2) + PDQ(0,1,1))
+  )
+fit_all %>%
+  select(arima110011) %>%
+  gg_tsresiduals()
+glance(fit_all)
+```
+The PACF plot in shows 3 spikes for non-seasonal lags so AR(3) can be considered. However the seasonal lags show exponential decay, therefore an MA(1) can be considered from the ACF plot that shows a significant spike at lag 12. Hence model (3,1,0)(0,1,1).
+
+The PACF shows 1 spike at lag 11 for non-seasonal as the other two spike are quite similar, therefore AR(1) can be considered. Along with the seasonal lag from ACF plot (1,1,0)(0,1,1) can also be considered. There also seems to be less white noise and lot more spikes for this model after doing a residual diagnostic check. 
+
+The ACF plot of 2 spikes for non-seasonal lags and seasonal lag at spike 12, MA(2) and MA(1) can be considered. PACF shows 3 spikes for non-seasonal lags, AR(3) can be considered. Therefore the model (3,1,2)(0,1,1) can be considered. 
+
+Despite the 3 models that have been considered, the ARIMA (0,1,2)(0,1,1) still outperforms the models mentioned above since it has the lowest AICc value. 
+
+\newpage
+## Question 5
+
+*Let the `ARIMA()` function choose a model. How does this compare with your chosen model from Q4? If you need to, make `ARIMA()` search harder exploring all possible options within the function. Perform a residual diagnostics analysis for your chosen model. (No more than 100 words). (6 marks)*
+
+```{r}
+fit <- my_series %>%
+  model(
+    arima012011 = ARIMA(log(Turnover) ~ pdq(0,1,2) + PDQ(0,1,1)),
+    fullsearch = ARIMA(log(Turnover), stepwise = FALSE, approx = FALSE)
+  )
+
+fit %>%
+  select(fullsearch) %>%
+  gg_tsresiduals()
+
+glance(fit)
+fit %>% select(fullsearch) %>% report()
+
+augment(fit) %>% features(.innov, ljung_box, dof = 4, lag = 24)
+
+
+```
+The ARIMA function has selected the ARIMA (0,1,2)(1,1,1) model. The residuals show little difference, also illustrating a heteroskedastic pattern. As for the ACF plot, it shows a significant spike at lag 10, followed by a couple of small spikes lags 16, 20 and 26. The histogram also shows a normal distribution with no outliers at either end of tails. If we were to perform a white-noise test, the p-value is small, indicating residuals are correlated.
+
+\newpage
+## Question 6
+
+*Remember that you cannot use information criteria to compare between models with different orders of differencing.* **If necessary** *use an appropriate test set to choose the ARIMA model you want to use for forecasting. Which model have you selected and why? (No more than 50 words). (4 marks)*
+
+```{r}
+fit_all <- my_series %>%
+  model(
+    arima012011 = ARIMA(log(Turnover) ~ pdq(0,1,2) + PDQ(0,1,1)),
+    arima310011 = ARIMA(log(Turnover) ~ pdq(3,1,0) + PDQ(0,1,1)),
+    arima110011 = ARIMA(log(Turnover) ~ pdq(1,1,0) + PDQ(0,1,1)),
+    arima013011 = ARIMA(log(Turnover) ~ pdq(3,1,2) + PDQ(0,1,1)),
+    fullsearch = ARIMA(log(Turnover), stepwise = FALSE, approx = FALSE)
+  )
+glance(fit_all)
+
+
+
+```
+The models considered this far have all used seasonal and first-order differencing. Hence AICc is appropriate for comparison. Observing the AICc, we find that that the ARIMA(0,1,2)(1,1,1) model has the lowest value. Therefore, the model that R has chosen will be used for forecasting.
+
+\newpage
+## Question 7
+
+*Generate and plot forecasts and forecast intervals from your chosen ARIMA model for two years following the end of your sample. Comment on these. (No more than 50 words). (3 marks)*
+
+```{r}
+fit %>%
+  select(fullsearch) %>%
+  forecast(h = "2 years") %>%
+  autoplot(my_series)
+
+fit %>%
+  select(fullsearch) %>%
+  forecast(h = "2 years") %>%
+  autoplot()
+```
+The ARIMA (0,1,2)(1,1,1) model forecast captured the seasonality quite well as the pattern almost resembles with the original data. In addition, the forest intervals do not appear too wide where the seasonality peaks occur but quite wide in between.
+
+
+\newpage
+## Question 8
+
+*You have now considered several modelling frameworks and built several models for your data set. In this part of the assignment you will evaluate these.*
+
+*Find your data on the ABS website and update your series till the end of the currently available data. Explore your updated time series and comment on the effects of the COVID-19 pandemic. Provide any necessary plots to support your analysis. Some States and Industries are unfortunately affected more than others. (6 marks)*
+```{r}
+#updated data 
+abs_data <- readabs::read_abs(series_id="A3349434X") %>% 
+  select(date,value) %>%
+  mutate(date=yearmonth(date)) %>% 
+  as_tsibble(index = date)
+```
+
+```{r}
+abs_data %>% autoplot(value) +   labs(
+    title = "Turnover: Western Australia Department Stores 1982-2022 ",
+    y = "$AU in millions"
+  )
+#zoomed in
+abs_data %>%
+  filter(year(date)>=2017) %>%
+  autoplot(value) +   labs(
+    title = "Turnover: Western Australia Department Stores 2017-2022 ",
+    y = "$AU in millions"
+  )
+
+#seasonal plot
+abs_data %>%
+  gg_season(value, labels = 'both') + guides(colour = "none") +
+  labs(
+    title = "Turnover: Western Australia Department Stores Seasonal Plot ",
+    y = "$AU in millions"
+  )
+
+abs_data %>% 
+  filter(year(date)>2018) %>%
+  gg_season(value, labels = 'both') + guides(colour = "none") +
+  labs(
+    title = "Turnover: Western Australia Department Stores Seasonal Plot ",
+    y = "$AU in millions"
+  )
+
+#subseries plot
+abs_data %>%
+  gg_subseries(value) +
+  labs(
+    title = "Turnover: Western Australia Department Stores Seasonal Plot 1982-2022 ",
+    y = "$AU in millions"
+  )
+
+my_series %>%
+  gg_subseries(Turnover) +
+  labs(
+    title = "Turnover: Western Australia Department Stores Seasonal Plot 1982-2018 ",
+    y = "$AU in millions"
+  )
+```
+The updated data now contains turnovers for department stores in Western Australia from April 1982 to March 2022.  The time series still illustrates an upward trend with seasonality patterns peaking every end of the year. However, from 2020 onwards, there seems to be some cyclic patterns between right before a seasonality peak.
+ 
+To analyse this further, the seasonal plot for 2020 and 2021 show that these cyclic peaks are occurring around the first half of the year (around April to July). The peak from April to May in 2021 could be capturing when Western Australia first went into lockdown near the end of March and many citizens went into panic buying. Furthermore, the time series for 2020 and 2021 seem to be higher than 2019. A possible reason could be that many department stores offering online services have caused the turnovers to increase.  
+
+To demonstrate, the subseries plot for the updated data has also showed that the mean of turnover’s has jumped slightly across all 12 months. It seems that the COVID-19 pandemic did not dramatically affect Western Australia department stores. 
+
+
+\newpage
+## Question 9
+
+*Generate forecasts for the period post 2019 until the end of your sample, from the models considered "best" in all assignments. More specifically, generate forecasts from the best benchmark, the best ETS and best ARIMA model. Plot the forecasts (both point forecasts and prediction intervals) together with the observed data and comment on these. (Make sure you can clearly visualise these. You may choose to plot on multiple graphs.) (6 marks)* 
+
+```{r}
+#training 1982 - 2019
+abs_data_train <- abs_data %>% slice(1:453)
+#test 2020-2022
+abs_data_test <- abs_data %>%
+  filter(year(date) >= 2020)
+```
+
+```{r}
+#benchmark -  seasonal naive model was chosen best in previous. So hence u this. 
+abs_data_benchmark_fit <-  abs_data_train %>%
+  model(Seasonal_naive = SNAIVE(value))
+
+#forecast 27 months from dec 2019 since our data ends on march 2022. 
+abs_data_benchmark_fc <- abs_data_benchmark_fit %>%
+  forecast(h = '27 months')  
+
+abs_data_benchmark_fc %>% autoplot(abs_data) +
+  labs(title = "SNAIVE: Turnover for Department Stores in Western Australia",
+       y = "$AU in millions") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+abs_data_benchmark_fc %>% autoplot(abs_data_test) +
+  labs(title = "SNAIVE: Turnover for Department Stores in Western Australia",
+       y = "$AU in millions") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+benchmark_point_intervals <- abs_data_train%>%
+  model(SNAIVE(value)) %>%
+  forecast(h = '27 months') %>%
+  hilo()
+print(benchmark_point_intervals)
+
+#ETS-  MAM chosen as best model in previous.
+ETS_fit <- abs_data_train %>%
+  model(
+    hw_multi = ETS(value ~ error("M") + trend("A") +
+                                                season("M")))
+ETS_fc <- ETS_fit %>%
+  forecast(h = '27 months')
+
+ETS_fc  %>% autoplot(filter(abs_data, year(date)>2019)) +  
+  labs(title = "ETS(M,A,M) : Turnover for Department Stores in Western Australia",
+       y = "$AU in millions") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+ETS_point_intervals <- ETS_fit %>%
+  forecast(h= '27  months') %>%
+  hilo()
+print(ETS_point_intervals)
+
+#ARIMA - best arima model ARIMA(0,1,2)(1,1,1)
+abs_data_train %>% autoplot(log(value)  %>% 
+  difference(12) %>% difference (1))
+
+arima_fit <- abs_data_train %>%
+  model(
+    arima012111 = ARIMA(log(value) ~ pdq(0,1,2) + PDQ(1,1,1))
+  )
+
+arima_fc <- arima_fit %>%
+  select(arima012111) %>%
+  forecast(h = "27 months")
+
+arima_fc %>% autoplot(filter(abs_data, year(date)>2019)) +
+   labs(title = "ARIMA(0,1,2)(1,1,1): Turnover for Department Stores in Western Australia",
+       y = "$AU in millions") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+arima_point_intervals <- arima_fit %>%
+  forecast(h= '27 months') %>%
+  hilo() 
+arima_point_intervals
+print(arima_point_intervals)
+
+
+```
+The training set that consists of the dates 1982 to 2019 will be used to forecast the test set that contains the period post 2019. Since the sample ends in March 2022, the forecasted value used will be 27 months. 
+
+The best benchmark method from previous assignment was the seasonal naïve model. Forecasting this model onto to the observed data shows that the forecast intervals capture the seasonality peaks, however, did not capture the cyclic trends. Therefore, the forecasts intervals are a bit wide. The point intervals for SNAIVE model are also quite wide for both the 80% and 95% prediction intervals, indicating a lot of residuals left over. 
+
+The ETS(M,A,M) model was also able to capture the seasonality pattern but also was not able to capture the cyclic pattern around the first half of the year. The forecast intervals are also wide in this model, but the seasonality peaks the forecast intervals are narrow as they closely align with the original. 
+
+The ARIMA(0,1,2)(1,1,1) model also captured the seasonality pattern but fail to capture the cyclic patterns again. However, the forecast intervals are much narrower than the other two models. The seasonality peak around December 2019 closely aligns with the original data. The 95% prediction intervals for the end of year are somewhat narrower than the previous models as well.  
+
+\newpage
+## Question 10
+
+*Evaluate the accuracy of the point forecasts over the period post 2019. A table with accuracy measures will be necessary to be presented here. Comment on which forecasts are the most accurate. (4 marks)*
+```{r}
+accuracy(abs_data_benchmark_fc,abs_data_test)
+accuracy(ETS_fc, abs_data_test)
+accuracy(arima_fc, abs_data_test)
+```
+The RMSE value for the ARIMA model outperforms both the seasonal naive and ETS(M,A,M) model. Hence the ARIMA model
+would be a better fitted model as it has the smallest magnitude of errors. 
+
+\newpage
+## Question 11
+
+*Use all three models to forecast the next 24-months of your updated series. Generate the necessary plots and comment on the forecasts. Make sure you can clearly visualise these. How have your models faired amidst the effects of COVID-19? (9 marks)*
+
+```{r}
+all_model_fit <- abs_data %>%
+  model(
+    Seasonal_naive = SNAIVE(value),
+    arima012111 = ARIMA(log(value) ~ pdq(0,1,2) + PDQ(1,1,1)),
+    hw_multi = ETS(value ~ error("M") + trend("A") +
+                                                season("M"))
+        )
+all_model_fc <- all_model_fit %>%
+  forecast(h = '24 months')
+
+all_model_fc %>%
+  autoplot(abs_data)
+all_model_fc  %>% 
+  autoplot(filter(abs_data, year(date)>=2020), alpha=0.6)
+
+point_intervals <- all_model_fit %>%
+  forecast(h = '24 months') %>%
+  hilo()
+view(point_intervals)
+
+
+all_model_fit %>%
+  select(Seasonal_naive) %>%
+  gg_tsresiduals()
+
+all_model_fit %>%
+  select(hw_multi) %>%
+  gg_tsresiduals()
+```
+The ETS(M,A,M) forecast intervals are the widest compare to the other two, whereas the seasonal naive model has the narrowest forecast interval. The prediction intervals for the seasonality naive method are also narrower. 
+
+Undergoing a residual check shows that there are less white noise and residuals for the seasonal naive method compared to the ETS(M,A,M) model. But the forecast and prediction intervals are still wide on some cases due to the pandemic being unpredictable. For instance, the seasonality peaks in December 2023 are quite narrow and closely align together. But a further forecast in December 2024 show that the intervals are wider. 
+
+In saying that all 3 models seem to capture the seasonality pattern quite well. The models are also able to capture the small upward and downward trends in the early in the year. These models are capturing that even amidst the COVID-19 pandemic, the turnover of Western Australia department stores will continue to peak at the end of each year. The ARIMA and ETS(M,A,M) model especially, show that the turnover is expected to increase as the peaks are higher than 2021 and 2022.
+
+
+
+*You have now completed all tasks for this unit if you are enrolled in ETF3231 (one more to go for ETF5231). I hope you have learnt a lot from your hard work throughout the semester completing the assignments.*
+
+*Many congratulations.*\
+*Cheers,*\
+*George*
+
