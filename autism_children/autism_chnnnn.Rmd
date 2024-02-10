@@ -1,0 +1,67 @@
+---
+title: "autism_children_ffnn"
+author: "Kevin. T"
+date: "2024-02-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(keras)
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+autism_df <- read_csv("autism_child_data.csv")
+head(autism_df)
+```
+
+```{r}
+summary(autism_df)
+```
+- age is in chr
+- missing values
+- encode catagorical variables to dummy for NN/ 
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r}
+autism_df <- autism_df %>%
+  mutate(
+    relation = na_if(relation, "?"),
+    ethnicity = na_if(ethnicity, "?")
+  )
+
+autism_df <- autism_df %>%
+  mutate(age = as.integer(age),
+         gender = as.factor((gender))) %>%
+  na.omit()
+# Assuming your dataframe is named autism_df
+autism_df$gender <- ifelse(autism_df$gender == "m", 1, 0)  
+autism_df$jundice <- ifelse(autism_df$jundice == "yes", 1, 0)
+autism_df$austim <- ifelse(autism_df$austim == "yes", 1, 0)
+autism_df$used_app_before <- ifelse(autism_df$used_app_before == "yes", 1, 0)
+autism_df$`Class/ASD` <- ifelse(autism_df$`Class/ASD` == "YES", 1, 0)  # Pay attention to case sensitivity
+
+str(autism_df)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+# Using the fastDummies package
+library(fastDummies)
+
+autism_dummy <- dummy_cols(autism_df, select_columns = c("ethnicity", "relation"), remove_first_dummy = TRUE)
+
+
+```
+
