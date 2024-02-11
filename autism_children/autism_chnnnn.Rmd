@@ -9,9 +9,40 @@ output: html_document
 library(tidyverse)
 library(keras)
 
+install_keras(method = c("conda"), 
+              conda = "auto", 
+              tensorflow = "default",
+              extra_packages = c("tensorflow-hub"))
+
+
+```
+```{r}
+
+reticulate::install_python("3.11:latest")
 ```
 
+```{r}
+library(tensorflow)
+```
+
+
+```{r}
+devtools::install_github("rstudio/keras", dependencies = TRUE)
+devtools::install_github("rstudio/tensorflow", dependencies = TRUE)
+
+install_keras()
+install_tensorflow()
+```
+
+
+
 ## R Markdown
+
+```{r}
+library(tensorflow)
+install_tensorflow(envname = "r-tensorflow")
+```
+
 
 This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 
@@ -62,6 +93,144 @@ library(fastDummies)
 
 autism_dummy <- dummy_cols(autism_df, select_columns = c("ethnicity", "relation"), remove_first_dummy = TRUE)
 
+write_csv(autism_df, "autism_new.csv")
+write_csv(autism_dummy, "autism_encoded.csv")
+
+
+```
+
+
+ML Project
+```{r}
+set.seed(123)
+autism_df <- as_tibble(read_csv("autism_encoded.csv"))
+head(autism_df)
+```
+
+
+```{r}
+
+# Assuming 'data' is your dataframe
+autism_new <-autism_df %>%
+  select(-id, -contry_of_res, -age_desc, -ethnicity, -relation) %>%
+  mutate(across(where(is.numeric), scale))
+
+# Note: Make sure 'Class_ASD' or your target variable is not scaled if included accidentally
+```
+
+
+```{r}
+# split dataset
+n = nrow(autism_new)
+index <- sample(1:n,n*0.6)
+autism_new%>%
+  slice(index) -> autism_train
+autism_new%>%
+slice(-index) -> autism_valid
+```
+
+
+
+
+
+```{r}
+p <- 29
+K2 = 5 # Number of neurons in hidden laye
+m = 2
+
+# Adjusting the model for binary classification
+NN1 <- keras_model_sequential() %>%
+  layer_dense(units = K2, activation = "relu", input_shape = c(p)) %>%
+  layer_dense(units = 1, activation = 'sigmoid')  # Adjusted for binary classification
+
+NN1 %>% compile(
+  loss = 'binary_crossentropy',  # Adjusted for binary classification
+  optimizer = 'adam',
+  metrics = c('accuracy')
+)
+
+
+```
+
+
+```{r}
+autism_df2 <- as_tibble(read_csv("autism_new.csv"))
+y_data = autism_df2
+x_scaled <-autism_df2 %>%
+  select(-id, -contry_of_res, -age_desc, -ethnicity, -relation, -`Class/ASD`) %>%
+  mutate(across(where(is.numeric), scale))
+```
+```{r}
+X_train <- as.matrix(autism_train[, -ncol(autism_train)])  # Exclude the last column (target)
+X_valid <- as.matrix(autism_valid[, -ncol(autism_valid)]) 
+
+# Prepare the target (y) - Assuming the last column is the binary target
+# Convert to factor to ensure correct one-hot encoding
+# Assuming the target variable is the last column and binary
+y_train <- as.numeric(autism_train[[ncol(autism_train)]])  # Convert to numeric vector
+y_valid <- as.numeric(autism_valid[[ncol(autism_valid)]])
+
+
+
+```
+
+
+```{r}
+# Assuming NN1 is your compiled model
+history <- NN1 %>% fit(
+  x = X_train,
+  y = y_train,
+  epochs = 200,
+  batch_size = 10,
+  validation_data = list(X_valid, y_valid),
+  verbose = TRUE
+)
+
+
+```
+
+
+
+```{r}
+# Assuming NN1 is your compiled model
+learnNN1 <- NN1 %>% fit(
+  x = Xscaled_train,               # Scaled features for training
+  y = y_data_oneh_train,           # Target variable for training, one-hot encoded if necessary
+  epochs = 200,                    # Number of epochs to train
+  batch_size = 10,                 # Batch size for training
+  validation_data = list(Xscaled_valid, y_data_oneh_valid), # Validation data
+  verbose = TRUE                   # Set verbose to TRUE to see progress, or FALSE for no output
+)
+
+# Save the trained model to an HDF5 file
+save_model_hdf5(NN1, "NN1.h5")
+
+```
+
+```{r}
+get_weights(NN1)
+```
+
+
+```{r}
+model %>% compile(
+  loss = 'binary_crossentropy',
+  optimizer = optimizer_rmsprop(),
+  metrics = c('accuracy')
+)
+
+x_train <- as.matrix(autism_train[, -ncol(autism_train)])  # Exclude the target variable
+y_train <- as.matrix(autism_train[, ncol(autism_train)])    # Only the target variable
+
+x_valid <- as.matrix(autism_valid[, -ncol(autism_valid)])  # Exclude the target variable
+y_valid <- as.matrix(autism_valid[, ncol(autism_valid)])    # Only the target variable
+
+history <- model %>% fit(
+  x_train, y_train,
+  epochs = 30,
+  batch_size = 10,
+  validation_data = list(x_valid, y_valid)
+)
 
 ```
 
