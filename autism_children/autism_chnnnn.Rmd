@@ -8,18 +8,8 @@ output: html_document
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(keras)
-
-install_keras(method = c("conda"), 
-              conda = "auto", 
-              tensorflow = "default",
-              extra_packages = c("tensorflow-hub"))
-
-
 ```
-```{r}
 
-reticulate::install_python("3.11:latest")
-```
 
 ```{r}
 library(tensorflow)
@@ -155,11 +145,141 @@ NN1 %>% compile(
 
 ```{r}
 autism_df2 <- as_tibble(read_csv("autism_new.csv"))
-y_data = autism_df2
-x_scaled <-autism_df2 %>%
-  select(-id, -contry_of_res, -age_desc, -ethnicity, -relation, -`Class/ASD`) %>%
-  mutate(across(where(is.numeric), scale))
+
+x_scaled <- autism_df2 %>% 
+  select(A1_Score:A10_Score) %>%
+  scale() 
+
+y_data <- autism_df2 %>%
+  select(`Class/ASD`) 
 ```
+
+
+```{r}
+# Check dimensions
+dim(x_scaled_train)
+dim(y_data_train)
+dim(x_scaled_valid)
+dim(y_data_valid)
+
+```
+
+
+```{r}
+set.seed(123)
+n = nrow(autism_df2)
+index <- 1:190
+indexval = setdiff(1:n,index)
+#Training sample
+y_data_train = y_data[index,]
+x_scaled_train = x_scaled[index,]
+#Validation sample
+y_data_valid = y_data[indexval,]
+x_scaled_valid = x_scaled[indexval,]
+
+```
+
+
+```{r}
+
+
+```
+
+
+
+
+```{r}
+p = 10  # Number of predictors
+K2 = 5 # Number of neurons in hidden layer
+m = 2  # Number of classes
+NN1 <- keras_model_sequential () %>%
+  layer_dense(units = K2, activation = "relu",input_shape = p) %>%
+  layer_dense(units = m,activation = 'sigmoid') #Output layer
+```
+
+
+```{r}
+NN1%>%  
+    compile(
+    loss = "binary_crossentropy")->NN1
+```
+
+
+```{r}
+set.seed(123)
+n = nrow(autism_df2)
+index <- sample(1:n, n * 0.6)
+
+# Prepare the training and validation data
+x_scaled_train = x_scaled[index, ]
+x_scaled_valid = x_scaled[-index, ]
+
+y_data_train = y_data[index, ]
+y_data_valid = y_data[-index, ]
+
+p = 10  # Number of predictors
+K2 = 5   # Number of neurons in the hidden layer
+m = 1    # One output unit for binary classification
+
+# Define the model
+NN1 <- keras_model_sequential() %>%
+  layer_dense(units = K2, activation = "relu", input_shape = c(p)) %>%
+  layer_dense(units = m, activation = 'sigmoid')  # Output layer for binary classification
+
+# Compile the model
+NN1 %>% compile(
+  loss = "binary_crossentropy",
+  optimizer = 'adam',
+  metrics = c('accuracy')
+)
+
+# Convert x_scaled_train and x_scaled_valid to matrices
+x_scaled_train_matrix <- as.matrix(x_scaled_train)
+x_scaled_valid_matrix <- as.matrix(x_scaled_valid)
+
+# Ensure y_data_train and y_data_valid are numeric vectors
+y_data_train_vector <- as.numeric(y_data_train$`Class/ASD`) - 1
+y_data_valid_vector <- as.numeric(y_data_valid$`Class/ASD`) - 1
+
+# Train the model using matrices
+learnNN1 <- NN1 %>% fit(
+  x = x_scaled_train_matrix,
+  y = y_data_train_vector,
+  epochs = 200,
+  batch_size = 10,
+  validation_data = list(x_scaled_valid_matrix, y_data_valid_vector),
+  verbose = TRUE
+)
+
+
+```
+
+
+```{r}
+plot(learnNN1)
+```
+
+```{r}
+x_scaled_matrix <- as.matrix(x_scaled)
+Prob = predict(NN1 ,x_scaled_matrix)[,1]
+```
+
+```{r}
+Prob_valid = predict(NN1 ,x_scaled_valid_matrix)
+# This gives us the probability of each class. The predicted class is the one that
+# is assigned the most probability. We can compute it as
+Predicted_class = apply(Prob_valid,1,which.max)
+```
+
+```{r}
+library(caret)
+CM1 = confusionMatrix(as.factor(Predicted_class),
+                      as.factor(autism_df2$`Class/ASD`[100:240]))
+# This neural network has an accuracy of
+CM1$overall[1]
+```
+
+
 ```{r}
 X_train <- as.matrix(autism_train[, -ncol(autism_train)])  # Exclude the last column (target)
 X_valid <- as.matrix(autism_valid[, -ncol(autism_valid)]) 
@@ -231,6 +351,61 @@ history <- model %>% fit(
   batch_size = 10,
   validation_data = list(x_valid, y_valid)
 )
+
+```
+
+
+```{r}
+set.seed(123)
+# Let us load the data set:
+Tshirt = as_tibble(read.csv("Tshirt.csv"))
+# Remember from the lecture that we must prepare the data when calibrating neural networks.
+# First, we must make the response variable into one-hot format.
+library(keras)
+# In the function `to_categorical`, the indexes in the categorical variable must go
+# from zero to m-1
+y_data_oneh=to_categorical(Tshirt$Purchased_product-1, num_classes = 3)
+# Second, we must scale the predictors:
+Xscaled = scale(
+Tshirt%>%
+select(Price_cheap,Price_middle,Price_expensive,Age))
+# Finally, let us split the sample into training and validation sample.
+n = nrow(Tshirt)
+index <- 1:300
+indexval = setdiff(1:n,index)
+#Training sample
+y_data_oneh_train = y_data_oneh[index,]
+Xscaled_train = Xscaled[index,]
+#Validation sample
+y_data_oneh_valid = y_data_oneh[indexval,]
+Xscaled_valid = Xscaled[indexval,]
+# Define the architecture of the neural network:
+p = 4 # Number of predictors
+m = 3 # Number of classes
+K2 = 5 # Number of neuron in second layer
+NN1 <- keras_model_sequential () %>%
+layer_dense(units = K2, activation = "relu",input_shape = p) %>%
+layer_dense(units = m,activation = 'softmax') #Output layer
+# Define the loss function
+NN1%>%
+compile(
+loss = "categorical_crossentropy")->NN1
+```
+
+```{r}
+# Fit the model to the training data
+history <- NN1 %>% fit(
+  x = Xscaled_train,
+  y = y_data_oneh_train,
+  epochs = 100,
+  batch_size = 32,
+  validation_data = list(Xscaled_valid, y_data_oneh_valid)
+)
+
+
+```
+
+```{r}
 
 ```
 

@@ -1,0 +1,289 @@
+---
+title: "Turnover Fast Food and Cafe"
+author: "Kevin. T"
+date: "2024-01-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(forecast)
+library(zoo)
+library(fpp3)
+library(readr)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+food_retail_turnover <- read_csv("vic-food-turnover.csv")
+head(food_retail_turnover)
+
+```
+```{r}
+
+my_series <- food_retail_turnover %>%
+  rename(Turnover = OBS_VALUE_VIC) %>%
+  select(TIME_PERIOD, Turnover) %>%
+  mutate(TIME_PERIOD = yearmonth(TIME_PERIOD)) %>%
+  as_tsibble(index = TIME_PERIOD)
+
+head(my_series)
+
+```
+```{r}
+my_series %>% autoplot(Turnover) + ggtitle("Victorian cafes, restaurants & fast-food turnover") +
+  ylab("$AU in millions")
+```
+
+### General Plotts
+```{r}
+my_series %>% 
+  filter(year(TIME_PERIOD)>2018) %>%
+  gg_season(Turnover, labels = 'both') + guides(colour = "none") +
+  labs(
+    title = "Turnover: Western Australia Department Stores Seasonal Plot ",
+    y = "$AU in millions"
+  )
+
+#subseries plot
+my_series %>%
+  filter(year(TIME_PERIOD)>2018) %>%
+  gg_subseries(Turnover) +
+  labs(
+    title = "Turnover: Western Australia Department Stores Seasonal Plot 1982-2022 ",
+    y = "$AU in millions"
+  )
+```
+
+
+
+
+```{r}
+#Transformation
+my_series %>%
+  features(Turnover, features = guerrero) 
+
+my_series %>% autoplot(log(Turnover))
+
+my_series %>% autoplot(log(Turnover)  %>% 
+  difference(12))
+
+#Automatic difference selection
+my_series %>% mutate(log_turnover = log(Turnover)) %>%
+  features(log_turnover, unitroot_nsdiffs) 
+
+my_series %>% autoplot(log(Turnover)  %>% 
+  difference(12) %>% difference (1)) 
+
+
+
+```
+
+```{r}
+
+my_series %>% gg_tsdisplay(log(Turnover) %>% difference(12) %>% difference(), 
+                           plot_type = 'partial')
+
+
+```
+
+Observed:
+* non-seasonal spikes in the PACF: AR(2)
+* seasonal MA(1) due to the large spike at 12 in the ACF
+* Model Chosen: 
+
+```{r}
+arima_210_011 <- my_series %>% model(
+  ARIMA(log(Turnover)~pdq(2,1,0)+PDQ(0,1,1))
+  )
+arima_210_011 %>% report()
+
+arima_210_011 %>% gg_tsresiduals()
+
+augment(arima_210_011) %>% features(.innov, ljung_box, lag=24, dof=3)
+
+augment(arima_210_011) %>% gg_tsdisplay(.innov, plot_type = 'partial')
+
+```
+
+
+
+
+Other models worth considering:
+* MA(2): 2 spikes in ACF plot: ARIMA(0,1,2)(0,1,1)
+* AR(4): large spike in ACF: ARIMA(4,1,0)(0,1,1)
+* AR(2)MA(2): ARIMA(2,1,2)(0,1,1)
+
+
+```{r}
+arima.models <- my_series %>% model(
+  arima_210_011 = ARIMA(log(Turnover)~pdq(2,1,0)+PDQ(0,1,1)),
+  arima_012_011 = ARIMA(log(Turnover)~pdq(0,1,2)+PDQ(0,1,1)),
+  arima_410_011 = ARIMA(log(Turnover)~pdq(4,1,0)+PDQ(0,1,1)),
+  arima_212_011 = ARIMA(log(Turnover)~pdq(2,1,2)+PDQ(0,1,1))
+  )
+arima.models %>%  glance() %>% select(.model, AIC, AICc, BIC)
+
+
+```
+
+Lower values of AIC, AICc, and BIC are preferred.
+Comparing the models based on these criteria, ARIMA(0,1,2) (arima_012_011) has the lowest AIC, AICc, and BIC values among the listed models.
+
+
+The auto.arima() function is useful, but anything automated can be a little dangerous, and it is worth understanding
+
+```{r}
+
+arima_models_auto <- my_series %>%
+  model(arima_auto1 = ARIMA(log(Turnover)),
+        arima_auto2 = ARIMA(log(Turnover), stepwise = FALSE, approximation = FALSE)
+  )
+arima_models_auto %>% select(arima_auto1) %>%  report()
+
+
+```
+
+The auto funcitonchose an ARIMA(0,1,4)(2,0,0)[12] for us. 
+
+```{r}
+arima_models_auto %>% select(arima_auto2) %>%  report()
+
+```
+### Choosing overlal model;
+
+```{r}
+fit_all <- my_series %>%
+  model(
+    arima_210_011 = ARIMA(log(Turnover)~pdq(2,1,0)+PDQ(0,1,1)),
+  arima_012_011 = ARIMA(log(Turnover)~pdq(0,1,2)+PDQ(0,1,1)),
+  arima_410_011 = ARIMA(log(Turnover)~pdq(4,1,0)+PDQ(0,1,1)),
+  arima_212_011 = ARIMA(log(Turnover)~pdq(2,1,2)+PDQ(0,1,1)),
+  fullsearch = ARIMA(log(Turnover), stepwise = FALSE, approx = FALSE)
+  )
+glance(fit_all)
+
+```
+ARIMA(2,1,2)(2,0,0)
+
+```{r}
+arima_models_auto %>%
+  select(arima_auto2) %>%
+  forecast() %>%
+  autoplot(my_series)
+
+```
+
+```{r}
+arima_models_auto %>%
+  select(arima_auto2) %>%
+  forecast() %>%
+  autoplot(filter(my_series,year(TIME_PERIOD)>=2010))
+
+```
+### Other Forecasting 
+
+
+```{r}
+#training 1982 - 2019
+turnover_train <- my_series %>% slice(1:453)
+#test 2020-2022
+turnover_test <- my_series %>%
+  filter(year(TIME_PERIOD) >= 2020)
+```
+
+
+```{r}
+turnover_benchmark_fit <-  turnover_train %>%
+  model(Seasonal_naive = SNAIVE(Turnover))
+
+#forecast 27 months from dec 2019 since our data ends on march 2022. 
+turnover_benchmark_fc <- turnover_benchmark_fit %>%
+  forecast(h = '5 years')  
+
+
+turnover_benchmark_fc %>% autoplot(my_series) +
+  labs(title = "SNAIVE: Turnover for Department Stores in Western Australia",
+       y = "$AU in millions") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+turnover_benchmark_fc %>% autoplot(turnover_test) +
+  labs(title = "SNAIVE: Turnover for Department Stores in Western Australia",
+       y = "$AU in millions") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+benchmark_point_intervals <- turnover_train%>%
+  model(SNAIVE(Turnover)) %>%
+  forecast(h = '5 years') %>%
+  hilo()
+print(benchmark_point_intervals)
+
+#ETS-  MAM chosen as best model in previous.
+ETS_fit <- turnover_train %>%
+  model(
+    hw_multi = ETS(Turnover ~ error("M") + trend("A") +
+                                                season("M")))
+ETS_fc <- ETS_fit %>%
+  forecast(h = '5 years')
+
+ETS_fc  %>% autoplot(filter(my_series, year(TIME_PERIOD)>2019)) +  
+  labs(title = "ETS(M,A,M) : Turnover for Department Stores in Western Australia",
+       y = "$AU in millions") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+ETS_point_intervals <- ETS_fit %>%
+  forecast(h= '5 years') %>%
+  hilo()
+print(ETS_point_intervals)
+
+#ARIMA - best arima model ARIMA(0,1,2)(1,1,1)
+turnover_train %>% autoplot(log(Turnover)  %>% 
+  difference(12) %>% difference (1))
+
+arima_fit <- turnover_train %>%
+  model(
+    arima012111 = ARIMA(log(Turnover) ~ pdq(0,1,2) + PDQ(1,1,1))
+  )
+
+arima_fc <- arima_fit %>%
+  select(arima012111) %>%
+  forecast(h = "27 months")
+
+arima_fc %>% autoplot(filter(my_series, year(TIME_PERIOD)>2019)) +
+   labs(title = "ARIMA(0,1,2)(1,1,1): Turnover for Department Stores in Western Australia",
+       y = "$AU in millions") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+arima_point_intervals <- arima_fit %>%
+  forecast(h= '27 months') %>%
+  hilo() 
+arima_point_intervals
+print(arima_point_intervals)
+
+
+```
+
+
+```{r}
+models_final <- my_series %>% model(
+  snaive = SNAIVE(log(Turnover)),
+  ETS_MAdM=ETS(Turnover~error("M")+trend("Ad")+season("M")),
+  ARIMA_014_011=ARIMA(log(Turnover)~pdq(2,1,1)+PDQ(2,0,0))
+)
+models_final %>%
+  forecast(h=60) %>%
+  autoplot(my_series %>% filter(year(TIME_PERIOD)>=2018), alpha=0.8)
+```
+
+```{r}
+accuracy(turnover_benchmark_fc,turnover_test)
+accuracy(ETS_fc, turnover_test)
+accuracy(arima_fc, turnover_test)
+```
+
+

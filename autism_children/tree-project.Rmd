@@ -1,0 +1,302 @@
+---
+title: "autism-data-trees"
+author: "Kevin. T"
+date: "2024-02-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(ipred)
+library(gbm)
+library(ranger)
+library(vip)
+```
+
+## R Markdown
+
+
+```{r}
+autism_df <- read_csv("ASD_children_traits.csv") %>%
+  na.omit()
+str(autism_df)
+
+```
+
+
+Rename column names
+```{r}
+autism_df <- autism_df %>% 
+  rename(
+    id = `CASE_NO_PATIENT'S` ,
+    Speech_delay_language_disorder = `Speech Delay/Language Disorder`,
+    Learning_disorder = `Learning disorder`,
+    Global_dev_delay_intellectual_disability = `Global developmental delay/intellectual disability`,
+    Social_Behavioural_Issues = `Social/Behavioural Issues`,
+    Childhood_Autism_Rating_Scale = `Childhood Autism Rating Scale`
+    )
+```
+
+
+Exploratory Analysis
+
+
+
+```{r}
+
+age_counts <- autism_df %>% 
+  filter(ASD_traits == "Yes") %>%
+  group_by(Age_Years) %>%
+  summarize(count = n())
+
+ethnicity_counts <-autism_df %>% 
+  filter(ASD_traits == "Yes") %>%
+  group_by(Ethnicity) %>%
+  summarize(count = n())
+
+```
+
+```{r}
+ggplot(ethnicity_counts, aes(x = reorder(Ethnicity, -count), y = count, fill = Ethnicity)) +
+  geom_bar(stat = "identity") +
+  xlab("Ethnicity Group") + ylab("Count") +
+  ggtitle("Count of Class/ASD") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, size = 8, hjust = 1, vjust = 1)) +
+  theme(legend.position="bottom")
+```
+
+
+
+```{r}
+p <- ggplot(ethnicity_counts, aes(x = reorder(Ethnicity, -count), y = count, fill = Ethnicity)) +
+  geom_bar(stat = "identity") +
+  xlab("Ethnicity Group") + ylab("Count") +
+  ggtitle("Count of Class/ASD") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, size = 8, hjust = 1, vjust = 1))
+
+# Convert to plotly
+p_plotly <- ggplotly(p)
+p_plotly
+```
+
+
+
+
+```{r}
+# Assuming ethnicity_counts is your data frame and is already prepared
+library(ggplot2)
+library(plotly)
+
+# Your original ggplot2 code
+p2 <- ggplot(age_counts,aes(x = reorder(Age_Years, -count), 
+                            y = count))  +
+  geom_bar(stat = "identity", color = "black", fill = "skyblue") +
+  xlab("Age Group") + ylab("Count") +
+  ggtitle("Count of Class/ASD") +
+  theme_minimal() 
+
+# Convert to plotly
+p_plotly <- ggplotly(p2)
+p_plotly
+
+
+
+```
+
+```{r}
+# Load necessary libraries
+library(plotly)
+
+# Assuming you have a data frame 'data' with a 'gender' column
+# If your data isn't already aggregated, you would do something like this:
+gender_counts <- autism_df %>% 
+  filter(autism == "yes") %>%
+  group_by(age) %>%
+  summarize(count = n())
+
+# Convert to data frame for plotly
+gender_df <- as.data.frame(gender_counts)
+names(gender_df) <- c("Gender", "Count")
+
+# Creating an interactive pie chart with plotly
+fig <- plot_ly(gender_df, labels = ~Gender, values = ~Count, type = 'pie',
+               textinfo = 'label+percent',
+               insidetextorientation = 'radial') %>%
+  layout(title = 'Gender Distribution')
+
+# Display the plot
+fig
+
+```
+
+
+ML Project
+```{r}
+autism_df1 <- autism_df%>%mutate_if(is.character, as.factor)
+```
+
+Classification Tree
+```{r}
+set.seed(1000) # for reproducibility
+n = nrow(autism_df1)
+index <- sample(1:n,n*0.6)
+autism_df1%>%
+  slice(index) -> autism_train 
+autism_df%>%
+  slice(-index) -> autism_valid
+```
+
+```{r}
+str(autism_df1)
+```
+
+
+
+```{r}
+tree_model1 <- rpart(ASD_traits ~ `Speech Delay/Language Disorder` + `Learning disorder` +
+                       Genetic_Disorders + Depression + `Global developmental delay/intellectual disability` +
+                       `Social/Behavioural Issues`,
+               data = autism_train, 
+               method = "class", cp = 0.01, minsplit = 1)
+rpart.plot(tree_model1)
+```
+
+
+
+
+```{r}
+library(rpart)
+# Example using a subset of variables; adjust according to your analysis
+tree_model <- rpart(ASD_traits ~ ., data = autism_train, method = "class", cp = 0.005, minsplit = 10)
+rpart.plot(tree_model)
+```
+```{r}
+Tree_cp0 <- rpart(ASD_traits ~ ., data = autism_train, method = "class", cp = 0)
+# Print cp table with cross-validation error (xerror)
+Tree_cp0$cptable
+```
+```{r}
+prunedTree = prune(Tree_cp0, cp = Tree_cp0$cptable[which.min(Tree_cp0$cptable[,"xerror"]),"CP"])
+```
+
+
+```{r}
+# For minobsTree we have
+point_pred_minobs <- predict(tree_model,newdata = autism_valid,type = "class")
+# For prunedTree we have
+point_pred_pruned <- predict(prunedTree,newdata = autism_valid,type = "class")
+#Use confusion matrices to measure predictive accuracy
+library(caret)
+predAccuracy_minobs = confusionMatrix(point_pred_minobs,as.factor(autism_valid$ASD_traits))
+predAccuracy_pruned = confusionMatrix(point_pred_pruned,as.factor(autism_valid$ASD_traits))
+# The predictive accuracy of minobsTree is
+predAccuracy_minobs$overall['Accuracy']
+predAccuracy_pruned$overall['Accuracy']
+```
+
+```{r}
+predAccuracy_minobs$table
+predAccuracy_pruned$table
+```
+
+### Reg tree
+```{r}
+autism_df2 <- autism_df %>%
+  select_if(is.numeric)
+set.seed(1000) # for reproducibility
+n = nrow(autism_df2)
+index <- sample(1:n,n*0.6)
+autism_df2%>%
+  slice(index) -> autism_train2 
+autism_df2%>%
+  slice(-index) -> autism_valid2
+
+
+```
+
+```{r}
+Regtree <- rpart(Childhood_Autism_Rating_Scale ~ ., data = autism_train2, cp = 0.001, minsplit = 5, method = "anova")
+#To prune according to the cross-validation error, we need to take a look at the cp table
+print(Regtree$cptable)
+```
+
+```{r}
+PrunedTree = prune(Regtree, cp= Regtree$cptable[which.min(Regtree$cptable[,"xerror"]),"CP"])
+```
+
+```{r}
+rpart.plot(boostTreeTrain)
+```
+
+
+```{r}
+randomforestTrain <- ranger(Childhood_Autism_Rating_Scale ~.,
+                            data = autism_train2,
+                            num.trees = 300,
+                            mtry = 5, #Only five predictors considered per split
+                            seed = 123,
+                            importance = "impurity")
+randomforestTrain
+```
+
+```{r}
+boostTreeTrain <- gbm(Childhood_Autism_Rating_Scale ~.,
+data = autism_train2,
+distribution = "gaussian",
+n.trees = 1000,
+shrinkage = 0.05,
+interaction.depth = 1, #We only want stumps
+cv.folds = 10)
+#What is the number of trees that minimize the cv error?
+nTrees = gbm.perf(boostTreeTrain)
+```
+
+```{r}
+boostTreeTrain <- gbm(Childhood_Autism_Rating_Scale ~.,
+data = autism_train2,
+distribution = "gaussian",
+n.trees = 130,
+shrinkage = 0.05,
+interaction.depth = 1)
+```
+
+```{r}
+pred_PT_Train = predict(PrunedTree,autism_train2)
+pred_RF_Train = predict(randomforestTrain,autism_train2)$predictions
+pred_Bo_Train = predict(boostTreeTrain,autism_train2)
+```
+
+```{r}
+# Now, let's measure the predictive accuracy for each method
+AccPT = accuracy(pred_PT_Train,autism_train2$Childhood_Autism_Rating_Scale)
+AccRF = accuracy(pred_RF_Train,autism_train2$Childhood_Autism_Rating_Scale)
+AccBo = accuracy(pred_Bo_Train,autism_train2$Childhood_Autism_Rating_Scale)
+AccTable = round(rbind(AccPT,AccRF, AccBo),3)
+rownames(AccTable) = c('PrunedTree', 'RandomForest', 'Boosting')
+AccTable
+```
+
+
+
+```{r}
+pred_PT_Val = predict(PrunedTree,autism_valid2)
+pred_RF_Val = predict(randomforestTrain,autism_valid2)$predictions
+pred_Bo_Val = predict(boostTreeTrain,autism_valid2)
+# Now, let's measure the predictive accuracy for each method
+AccPT = accuracy(pred_PT_Val,autism_valid2$Childhood_Autism_Rating_Scale)
+AccRF = accuracy(pred_RF_Val,autism_valid2$Childhood_Autism_Rating_Scale)
+AccBo = accuracy(pred_Bo_Val,autism_valid2$Childhood_Autism_Rating_Scale)
+AccTable = round(rbind(AccPT,AccRF,AccBo),3)
+rownames(AccTable) = c('PrunedTree','RandomForest','Boosting')
+AccTable
+```
+```{r}
+boostTreeTrain
+```
+

@@ -1,0 +1,373 @@
+---
+title: "US-Income-Inequality"
+author: "Kevin. T"
+date: "2024-02-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(MASS)
+library(tidyverse)
+library(ggplot2)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+us_gini <- read_csv("us-income-gini.csv") %>%
+  rename(state = State, year = Year, gini = Gini) %>%
+#Add abbreviation
+left_join(bind_cols(abb = state.abb, state = state.name)) %>%
+mutate(abb = case_when(state == "United States" ~ "US",
+state == "District of Columbia" ~ "DC",
+TRUE ~ abb))
+
+us_gini_clean <- us_gini %>%
+  dplyr::select("year", "state", "gini", "abb") 
+
+us_gini_wide <- us_gini_clean %>%
+  pivot_wider(names_from = year, values_from = gini) %>%
+  dplyr::select(state, sort(tidyselect::peek_vars()))
+
+us_gini_wide <- arrange(us_gini_wide, state)  # arrange state in alphabetical order
+```
+
+```{r}
+
+years_to_select <- seq(1920, 2020, by = 10)
+
+# Convert the years to character because column names are often treated as such, even if they are numeric
+years_to_select_char <- as.character(years_to_select)
+
+# Select the "State" column and the specified years
+us_gini_new <- us_gini_wide %>%
+  dplyr::select(c("state", all_of(years_to_select_char))) %>% left_join(bind_cols(abb = state.abb, state = state.name)) %>%
+mutate(abb = case_when(state == "United States" ~ "US",
+state == "District of Columbia" ~ "DC",
+TRUE ~ abb)) 
+```
+
+Mean imputation for NA
+
+```{r}
+us_gini_imp <- us_gini_new %>%
+  impute_mean_at(vars(c(`1920`, `1930`, `1940`, `1950`))) %>%
+  mutate(across(c(`1920`, `1930`, `1940`, `1950`), ~round(., 2)))
+  
+us_gini_pca <- us_gini_imp %>% as.data.frame() %>%
+  `rownames<-`(.$abb) %>%
+  dplyr::select(-state, -abb)
+
+```
+
+
+
+
+```{r}
+us_gini_pca %>% select_if(is.numeric) %>% 
+  prcomp(scale = FALSE) -> PCA
+
+view(PCA$rotation) #Summary of weights on the principal components
+summary(PCA)
+#Screen plot
+screeplot(PCA,type="lines")
+
+
+#Table PCA Results
+#summary(PCA)$importance %>% kable(booktabs = TRUE,
+#digits = 3) %>%
+#row_spec(2, hline_after = TRUE)
+```
+
+```{r}
+PCA$rotation %>% data.frame() %>% rownames_to_column(var = "year") %>%
+mutate(year = str_remove(year, "X")) %>%
+ggplot() +
+#Add the red lines
+geom_segment(mapping = aes(x = 0, xend = PC1*0.50,
+y = 0, yend = PC2*0.50),
+arrow = arrow(),
+colour = "red") +
+geom_text(data = PCA$x %>% data.frame() %>% rownames_to_column(),
+mapping = aes(x = PC1, y = PC2, label = rowname)) +
+#Label the red lines
+geom_text(mapping = aes(x = PC1*0.50, y = PC2*0.50, label = year),
+nudge_x = 0.025,
+colour = "red") +
+theme_bw() +
+labs(title = "Principle Component Analysis",
+subtitle = "A distance bi-plot",
+y = "PC2",
+x = "PC1")
+```
+```{r}
+biplot(PCA, cex = 0.75) # Distance Biplot
+biplot(PCA, scale = 0, cex = 0.75) # Correlation Biplot
+```
+# clustering factor 
+```{r}
+
+set.seed(3500) # Set seed so all same
+us_gini_cluster <- us_gini_imp %>%
+  dplyr::select(-state) 
+  scale %>%
+  kmeans(3, nstart=500) -> km
+km$cluster
+km$centers
+```
+
+
+```{r}
+us_gini_cluster$Clusters <- as.factor(km$cluster)
+```
+
+```{r}
+us_gini_cluster$PC1 <- data.frame(PCA$x)$PC1
+us_gini_cluster$PC2 <- data.frame(PCA$x)$PC2
+```
+
+```{r}
+us_gini_cluster_long  = us_gini_cluster %>% pivot_longer(
+cols = !c("State", "Clusters","PC1","PC2"),
+names_to = "Year",
+values_to = "Gini"
+)
+
+```
+
+```{r}
+test = data.frame(PCA$rotation)
+test$year = rownames(test)
+```
+
+```{r}
+library(ggplot2)
+
+# Assuming your dataframe is named df and it looks like the structure you provided
+ggplot(us_gini_cluster, aes(x = PC1, y = PC2, color = as.factor(Clusters), label = abb)) +
+  geom_point() + # Plot points
+  geom_text(aes(label=abb), vjust=1.5, color="black", size=3.5) + # Add state labels
+  scale_color_manual(values = c("1" = "skyblue", "2" = "salmon", "3" = "lightgreen")) + # Customize cluster colors
+  theme_minimal() + # Use a minimal theme
+  labs(title = "PCA of US GINI Coefficients with Clustering",
+       x = "Principal Component 1",
+       y = "Principal Component 2",
+       color = "Cluster") 
+
+```
+
+
+```{r}
+set.seed(3500) # Set seed so all same
+# Perform k-means clustering on the scaled numeric data
+km <- us_gini_imp %>%
+  select_if(is.numeric) %>%
+  scale() %>%
+  kmeans(3, nstart = 500)
+
+# Add the cluster assignments back to the original dataframe (or a modified version of it)
+us_gini_cluster_new <- us_gini_imp %>%
+  mutate(Cluster = km$cluster)
+
+km$cluster
+km$centers
+
+us_gini_cluster_new$PC1 <- data.frame(PCA$x)$PC1
+us_gini_cluster_new$PC2 <- data.frame(PCA$x)$PC2
+
+
+```
+
+```{r}
+test = data.frame(PCA$rotation)
+test$year = rownames(test)
+```
+
+
+
+```{r}
+arrow_scale <- 0.5
+
+ggplot(us_gini_cluster_new, aes(x = PC1, y = PC2, color = as.factor(Cluster))) +
+  geom_point(size = 2) + # Plot the PCA scores as points
+  geom_text(aes(label = abb), vjust = -1, size = 2.5) + # Add state labels
+  geom_segment(
+    data = test, 
+    aes(x = 0, y = 0, xend = PC1 * arrow_scale, yend = PC2 * arrow_scale),
+    arrow = arrow(length = unit(0.1, "inches")), color = "black"
+  ) + # Plot PCA loadings as arrows
+  geom_text(
+    data = test,
+    aes(x = PC1 * arrow_scale, y = PC2 * arrow_scale, label = year),
+    hjust = 1.1, vjust = 1.1, color = "black", size = 2.5
+  ) + # Add labels for PCA loadings
+  scale_color_manual(values = c("1" = "salmon", "2" = "skyblue", "3" = "lightgreen")) + # Customize cluster colors
+  theme_minimal() +
+  coord_fixed(ratio = 1) + # Fixed aspect ratio
+  labs(title = "PCA of US GINI Coefficients with Clustering",
+       x = "Principal Component 1",
+       y = "Principal Component 2",
+       color = "Cluster")
+
+```
+```{r}
+us_gini_mds2 <- us_gini_imp %>%
+  dplyr::select(-state) %>%            # Exclude the 'state' column if it's not needed in the analysis
+  column_to_rownames('abb')      # Use 'abb' as row names
+
+```
+
+```{r}
+set.seed(123)
+us_gini_mds <- sammon(dist(us_gini_imp))
+
+# Perform K-means clustering
+cluster <- kmeans(dist(us_gini_imp), 3)
+
+# Convert the points to a dataframe and add the cluster information
+df_mds <- as.data.frame(us_gini_mds$points)
+df_mds$cluster <- cluster$cluster
+
+# Combine the MDS points with the state abbreviations
+df_final <- cbind(df_mds, state = us_gini_imp$abb)
+
+# Plot the MDS with state abbreviations and cluster colors
+ggplot(df_final, aes(x = V1, y = V2, label = state, color = factor(cluster))) +
+  geom_text() +
+  labs(title = "Sammon MDS & K-Means Clustering",
+       x = NULL, y = NULL,
+       color = "Cluster") +
+  theme_bw() +
+  scale_color_viridis_d(end = 0.9)
+```
+
+
+```{r}
+us_gini_mds <- us_gini_imp %>%
+dist() %>% MASS::sammon() -> MDS
+```
+```{r}
+us_gini_imp %>%
+dist() %>%
+kmeans(3) -> cluster
+```
+
+```{r}
+MDS$points %>%
+#combine with kmeans clusters
+cbind(cluster$cluster) %>%
+as.data.frame() %>%
+rownames_to_column(var = "abb") %>%
+#plot
+ggplot(aes(x = V1, y = V2, label = abb, colour = factor(V3))) +
+geom_text() +
+labs(title = "Sammon MDS & K-Means Clustering",
+x = NULL, y = NULL,
+colour = "Cluster") +
+theme_bw() +
+scale_colour_viridis_d(end = 0.9)
+
+
+
+```
+
+Factor Analysis
+```{r}
+
+
+# Prepare the data for factor analysis
+us_gini_factanal <- us_gini_imp %>%
+  dplyr::select(-state) %>%            # Exclude the 'state' column if it's not needed in the analysis
+  column_to_rownames('abb')      # Use 'abb' as row names
+
+# Perform factor analysis
+fa <- factanal(us_gini_factanal, factors = 4, rotation = 'none', scores = 'none')
+
+# The result 'fa' is a list containing several components of the factor analysis result.
+
+```
+
+```{r}
+ev <- eigen(cor(us_gini_factanal)) # get eigenvalues
+ev$values
+scree(us_gini_factanal, pc=FALSE)
+```
+
+
+
+```{r}
+loadings(fa)["1920",3]
+loadings(fa)["2020",3]
+fa$uniquenesses["1920"]
+fa$uniquenesses["2020"]
+
+
+```
+```{r}
+fa_varimax <- factanal(us_gini_factanal, factors = 3, rotation = 'varimax', scores = 'none')
+fa_promax <- factanal(us_gini_factanal, factors = 3, rotation = 'promax', scores = 'none')
+```
+
+```{r}
+fa_varimax
+```
+
+```{r}
+fa_promax
+```
+
+```{r}
+load <- fa_promax$loadings[,1:2]
+plot(load,type="n") # set up plot
+text(load,labels=names(us_gini_factanal),cex=.7)
+
+
+load <- fa_varimax$loadings[,1:2]
+plot(load,type="n") # set up plot
+text(load,labels=names(us_gini_factanal),cex=.7)
+```
+
+
+```{r}
+fa_bart <- factanal(us_gini_factanal, factors = 3, rotation = 'none', scores = 'Bartlett')
+cor(fa_bart$scores)
+```
+```{r}
+fa_bartpro <- factanal(us_gini_factanal, factors = 3, rotation = 'promax', scores = 'Bartlett')
+cor(fa_bartpro$scores)
+```
+
+```{r}
+load <- fa_bart$loadings[,1:2]
+plot(load,type="n") # set up plot
+text(load,labels=names(us_gini_factanal),cex=.7)
+
+load <- fa_bartpro$loadings[,1:2]
+plot(load,type="n") # set up plot
+text(load,labels=names(us_gini_factanal),cex=.7)
+```
+```{r}
+fa_bart
+```
+
+```{r}
+library(psych)
+
+loads <- fa_bart$loadings
+
+fa.diagram(loads)
+```
+
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

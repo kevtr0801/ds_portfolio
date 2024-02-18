@@ -1,5 +1,5 @@
 ---
-title: "Turnover Fast Food and Cafe"
+title: "Forecasting turnover of Victoria's cafe and fast-food services"
 author: "Kevin. T"
 date: "2024-01-26"
 output: html_document
@@ -13,80 +13,195 @@ library(fpp3)
 library(readr)
 ```
 
-## R Markdown
+## Introduction
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+Data source: https://explore.data.abs.gov.au/vis?tm=turnover&pg=0&df[ds]=INDUSTRY_TOPICS&df[id]=RT&df[ag]=ABS&df[vs]=1.0.0&pd=2022-07%2C&dq=.20%2B41%2B42%2B43%2B44%2B45%2B46..AUS.M&ly[cl]=INDUSTRY&ly[rw]=TIME_PERIOD&ly[rs]=MEASURE%2CTSEST 
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
 
 ```{r}
-food_retail_turnover <- read_csv("vic-food-turnover.csv")
-head(food_retail_turnover)
+fs_turnover <- read_csv("vic-food-turnover.csv")
+head(fs_turnover)
+
+```
+
+### Data Cleaning 
+```{r}
+ fs_turnover<- fs_turnover %>%
+  rename(Turnover = OBS_VALUE_VIC, Month = TIME_PERIOD) %>%
+  select(Month, Turnover) %>%
+  mutate(Month = yearmonth(Month)) %>%
+  as_tsibble(index = Month)
+
+head(fs_turnover)
 
 ```
 ```{r}
-
-my_series <- food_retail_turnover %>%
-  rename(Turnover = OBS_VALUE_VIC) %>%
-  select(TIME_PERIOD, Turnover) %>%
-  mutate(TIME_PERIOD = yearmonth(TIME_PERIOD)) %>%
-  as_tsibble(index = TIME_PERIOD)
-
-head(my_series)
-
-```
-```{r}
-my_series %>% autoplot(Turnover) + ggtitle("Victorian cafes, restaurants & fast-food turnover") +
-  ylab("$AU in millions")
+fs_turnover %>% autoplot(Turnover) + ggtitle("Turnovers of Victorian cafes, restaurants & fast-food") +
+  ylab("$AUD (millions)") 
 ```
 
-### General Plotts
+### Exploring time series 
 ```{r}
-my_series %>% 
-  filter(year(TIME_PERIOD)>2018) %>%
+# seasonal plot 
+fs_turnover %>% 
+  filter(year(Month)>2018) %>%
   gg_season(Turnover, labels = 'both') + guides(colour = "none") +
   labs(
-    title = "Turnover: Western Australia Department Stores Seasonal Plot ",
-    y = "$AU in millions"
-  )
+    title = "Seasonal Plot ",
+    y = "$AUD (millions)")
 
 #subseries plot
-my_series %>%
-  filter(year(TIME_PERIOD)>2018) %>%
+fs_turnover %>%
+  filter(year(Month)>2018) %>%
   gg_subseries(Turnover) +
   labs(
     title = "Turnover: Western Australia Department Stores Seasonal Plot 1982-2022 ",
-    y = "$AU in millions"
+    y = "$AUD (millions)"
   )
 ```
 
+## Exploring Forecasting Models
 
+```{r}
+#training 1982 - 2019
+fs_train <- fs_logtransformed %>% slice(1:453)
+#test 2020- present 
+fs_test <- fs_logtransformed %>%
+  filter(year(Month) >= 2020)
+```
 
 
 ```{r}
-#Transformation
-my_series %>%
+fs_turnover %>% autoplot(Turnover) + ggtitle("Turnovers of Victorian cafes, restaurants & fast-food") +
+  ylab("$AUD (millions)") 
+
+fs_turnover %>%
   features(Turnover, features = guerrero) 
 
-my_series %>% autoplot(log(Turnover))
+fs_logtransformed <- fs_turnover %>%
+  mutate(log_turnover = log(Turnover))
 
-my_series %>% autoplot(log(Turnover)  %>% 
+fs_logtransformed %>% autoplot(log_turnover) + ggtitle("LOG Turnovers of Victorian cafes, restaurants & fast-food") +
+  ylab("$AUD (millions)") 
+```
+
+
+### Evaluating Seasonal Naive vs drift model  
+```{r}
+fit_train <- fs_train %>%
+  model(
+    snaive = SNAIVE(log(Turnover)),
+    drift = RW(log(Turnover) ~ drift())
+  )
+fit_train %>%  glance()
+
+fc_test <- fit_train %>%
+  forecast(h = "2 years")
+fc_test %>% autoplot(fs_turnover, alpha=0.6)
+
+fit_train %>% accuracy() %>% select(MAE, RMSE, MAPE, MASE)
+fc_test %>% accuracy(fs_turnover) %>% select(MAE, RMSE, MAPE, MASE)
+```
+```{r}
+fit_snaive <- fs_turnover %>%
+  model(
+    snaive = SNAIVE(log(Turnover)),
+  )
+fit_snaive %>%
+  gg_tsresiduals()
+```
+### Generating Forecast with SNAIVE model 
+
+```{r}
+turnover_benchmark_fit <-  fs_train %>%
+  model(Seasonal_naive = SNAIVE(Turnover))
+
+#forecast 3 years from dec 2019 since our data ends on november 2023. 
+turnover_benchmark_fc <- turnover_benchmark_fit %>%
+  forecast(h = '4 years')  
+
+turnover_benchmark_fc %>% autoplot(fs_turnover) +
+  labs(title = "SNAIVE: Turnover for Food Services in Victoria",
+       y = "$AUD (millions)") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+
+turnover_benchmark_fc %>% autoplot(fs_test) +
+  labs(title = "SNAIVE: Turnover forecast for Food Services in Victoria",
+       y = "$AUD (millions)") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+benchmark_point_intervals <- fs_train%>%
+  model(SNAIVE(Turnover)) %>%
+  forecast(h = '4 years') %>%
+  hilo()
+print(benchmark_point_intervals)
+```
+### Evaluatig Exponential Smoothing (ETS) 
+
+
+```{r}
+fit_ets <- fs_turnover %>%
+  model(ETS(log(Turnover)))
+report(fit_ets)
+
+```
+Shows no trend, but our plot clearly shows a steady upward trend (with the exception of the COVID pandemic)
+
+```{r}
+components(fit_ets) %>% autoplot()
+```
+
+```{r}
+#ETS-  MAM c
+ETS_fit <- fs_train %>%
+  model(
+    hw_multi = ETS(log(Turnover) ~ error("M") + trend("A") + season("M")),
+    no_trend = ETS(log(Turnover) ~ error("M") + trend("N") + season("M")))
+report(ETS_fit)
+```
+
+```{r}
+ETS_fit <- fs_train %>%
+  model(
+    ETS(log(Turnover) ~ error("M") + trend("A") + season("M")))
+ETS_fc <- ETS_fit %>%
+  forecast(h = '4 years')
+
+ETS_fc  %>% autoplot(filter(fs_turnover, year(Month)>2019))  +  
+  labs(title = "ETS(M,A,M) : Turnover for Food Services in Victoria",
+       y = "$AUD (millions)") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+ETS_point_intervals <- ETS_fit %>%
+  forecast(h= '4 years') %>%
+  hilo()
+print(ETS_point_intervals)
+```
+
+### ARIMA
+
+Further transformation  
+```{r}
+fs_turnover %>% autoplot(log(Turnover)  %>% 
   difference(12))
 
 #Automatic difference selection
-my_series %>% mutate(log_turnover = log(Turnover)) %>%
+fs_turnover %>% mutate(log_turnover = log(Turnover)) %>%
   features(log_turnover, unitroot_nsdiffs) 
 
-my_series %>% autoplot(log(Turnover)  %>% 
+fs_turnover %>% autoplot(log(Turnover)  %>% 
   difference(12) %>% difference (1)) 
 
 
 
 ```
 
+
 ```{r}
 
-my_series %>% gg_tsdisplay(log(Turnover) %>% difference(12) %>% difference(), 
+fs_transformed %>% gg_tsdisplay(log(Turnover) %>% difference(12) %>% difference(), 
                            plot_type = 'partial')
 
 
@@ -98,7 +213,7 @@ Observed:
 * Model Chosen: 
 
 ```{r}
-arima_210_011 <- my_series %>% model(
+arima_210_011 <- fs_turnover %>% model(
   ARIMA(log(Turnover)~pdq(2,1,0)+PDQ(0,1,1))
   )
 arima_210_011 %>% report()
@@ -121,7 +236,7 @@ Other models worth considering:
 
 
 ```{r}
-arima.models <- my_series %>% model(
+arima.models <- fs_turnover %>% model(
   arima_210_011 = ARIMA(log(Turnover)~pdq(2,1,0)+PDQ(0,1,1)),
   arima_012_011 = ARIMA(log(Turnover)~pdq(0,1,2)+PDQ(0,1,1)),
   arima_410_011 = ARIMA(log(Turnover)~pdq(4,1,0)+PDQ(0,1,1)),
@@ -140,7 +255,7 @@ The auto.arima() function is useful, but anything automated can be a little dang
 
 ```{r}
 
-arima_models_auto <- my_series %>%
+arima_models_auto <- fs_turnover %>%
   model(arima_auto1 = ARIMA(log(Turnover)),
         arima_auto2 = ARIMA(log(Turnover), stepwise = FALSE, approximation = FALSE)
   )
@@ -158,13 +273,13 @@ arima_models_auto %>% select(arima_auto2) %>%  report()
 ### Choosing overlal model;
 
 ```{r}
-fit_all <- my_series %>%
+fit_all <- fs_turnover %>%
   model(
     arima_210_011 = ARIMA(log(Turnover)~pdq(2,1,0)+PDQ(0,1,1)),
   arima_012_011 = ARIMA(log(Turnover)~pdq(0,1,2)+PDQ(0,1,1)),
   arima_410_011 = ARIMA(log(Turnover)~pdq(4,1,0)+PDQ(0,1,1)),
   arima_212_011 = ARIMA(log(Turnover)~pdq(2,1,2)+PDQ(0,1,1)),
-  fullsearch = ARIMA(log(Turnover), stepwise = FALSE, approx = FALSE)
+  arima_212_200 = ARIMA(log(Turnover), stepwise = FALSE, approx = FALSE)
   )
 glance(fit_all)
 
@@ -175,7 +290,7 @@ ARIMA(2,1,2)(2,0,0)
 arima_models_auto %>%
   select(arima_auto2) %>%
   forecast() %>%
-  autoplot(my_series)
+  autoplot(fs_turnover)
 
 ```
 
@@ -183,7 +298,7 @@ arima_models_auto %>%
 arima_models_auto %>%
   select(arima_auto2) %>%
   forecast() %>%
-  autoplot(filter(my_series,year(TIME_PERIOD)>=2010))
+  autoplot(filter(fs_turnover,year(Month)>=2020))
 
 ```
 ### Other Forecasting 
@@ -191,76 +306,36 @@ arima_models_auto %>%
 
 ```{r}
 #training 1982 - 2019
-turnover_train <- my_series %>% slice(1:453)
+fs_train <- fs_turnover %>% slice(1:453)
 #test 2020-2022
-turnover_test <- my_series %>%
-  filter(year(TIME_PERIOD) >= 2020)
+fs_test <- fs_turnover %>%
+  filter(year(Month) >= 2020)
 ```
 
 
 ```{r}
-turnover_benchmark_fit <-  turnover_train %>%
-  model(Seasonal_naive = SNAIVE(Turnover))
 
-#forecast 27 months from dec 2019 since our data ends on march 2022. 
-turnover_benchmark_fc <- turnover_benchmark_fit %>%
-  forecast(h = '5 years')  
-
-
-turnover_benchmark_fc %>% autoplot(my_series) +
-  labs(title = "SNAIVE: Turnover for Department Stores in Western Australia",
-       y = "$AU in millions") +
-  guides(colour = guide_legend(title = "Forecast"))
-
-turnover_benchmark_fc %>% autoplot(turnover_test) +
-  labs(title = "SNAIVE: Turnover for Department Stores in Western Australia",
-       y = "$AU in millions") +
-  guides(colour = guide_legend(title = "Forecast"))
-
-benchmark_point_intervals <- turnover_train%>%
-  model(SNAIVE(Turnover)) %>%
-  forecast(h = '5 years') %>%
-  hilo()
-print(benchmark_point_intervals)
-
-#ETS-  MAM chosen as best model in previous.
-ETS_fit <- turnover_train %>%
-  model(
-    hw_multi = ETS(Turnover ~ error("M") + trend("A") +
-                                                season("M")))
-ETS_fc <- ETS_fit %>%
-  forecast(h = '5 years')
-
-ETS_fc  %>% autoplot(filter(my_series, year(TIME_PERIOD)>2019)) +  
-  labs(title = "ETS(M,A,M) : Turnover for Department Stores in Western Australia",
-       y = "$AU in millions") +
-  guides(colour = guide_legend(title = "Forecast"))
-
-ETS_point_intervals <- ETS_fit %>%
-  forecast(h= '5 years') %>%
-  hilo()
-print(ETS_point_intervals)
-
-#ARIMA - best arima model ARIMA(0,1,2)(1,1,1)
-turnover_train %>% autoplot(log(Turnover)  %>% 
+#ARIMA - best arima model ARIMA(2,1,2)(0,1,1)
+fs_train %>% autoplot(log(Turnover)  %>% 
   difference(12) %>% difference (1))
 
-arima_fit <- turnover_train %>%
+
+arima_fit <- fs_train %>%
   model(
-    arima012111 = ARIMA(log(Turnover) ~ pdq(0,1,2) + PDQ(1,1,1))
+    arima012111 = ARIMA(log(Turnover) ~ pdq(2,1,2) + PDQ(0,1,1))
   )
 
 arima_fc <- arima_fit %>%
   select(arima012111) %>%
-  forecast(h = "27 months")
+  forecast(h =47)
 
-arima_fc %>% autoplot(filter(my_series, year(TIME_PERIOD)>2019)) +
-   labs(title = "ARIMA(0,1,2)(1,1,1): Turnover for Department Stores in Western Australia",
-       y = "$AU in millions") +
+arima_fc %>% autoplot(filter(fs_turnover, year(Month)>2019)) +
+   labs(title = "ARIMA(2,1,2)(0,1,1): Turnover for Department Stores in Western Australia",
+       y = "$AUD (millions)") +
   guides(colour = guide_legend(title = "Forecast"))
 
 arima_point_intervals <- arima_fit %>%
-  forecast(h= '27 months') %>%
+  forecast(h= '3 years') %>%
   hilo() 
 arima_point_intervals
 print(arima_point_intervals)
@@ -270,20 +345,45 @@ print(arima_point_intervals)
 
 
 ```{r}
-models_final <- my_series %>% model(
+models_final <- fs_train %>% model(
   snaive = SNAIVE(log(Turnover)),
   ETS_MAdM=ETS(Turnover~error("M")+trend("Ad")+season("M")),
-  ARIMA_014_011=ARIMA(log(Turnover)~pdq(2,1,1)+PDQ(2,0,0))
+  ARIMA_014_011=ARIMA(log(Turnover)~pdq(0,1,4)+PDQ(0,1,1))
 )
 models_final %>%
-  forecast(h=60) %>%
-  autoplot(my_series %>% filter(year(TIME_PERIOD)>=2018), alpha=0.8)
+  forecast(h=48) %>%
+  autoplot(fs_turnover %>% filter(year(Month)>=2020), alpha=0.8)
+```
+
+
+```{r}
+accuracy(turnover_benchmark_fc,fs_test) %>% select(.model,.type, ME, RMSE,MAPE, MASE, RMSSE)
+accuracy(ETS_fc, fs_test) %>% select(.model,.type, ME, RMSE,MAPE, MASE, RMSSE)
+accuracy(arima_fc, fs_test) %>% select(.model,.type, ME, RMSE,MAPE, MASE, RMSSE)
 ```
 
 ```{r}
-accuracy(turnover_benchmark_fc,turnover_test)
-accuracy(ETS_fc, turnover_test)
-accuracy(arima_fc, turnover_test)
+
 ```
 
+```{r}
+models_final %>%
+  forecast(h='3 years') %>%
+  accuracy(fs_test) %>% select(.model,.type, ME, RMSE,MAPE, MASE, RMSSE)
+
+```
+
+```{r}
+all_model_fit <- fs_turnover %>%
+  model(
+    Seasonal_naive = SNAIVE(Turnover),
+    arima012111 = ARIMA(log(Turnover) ~ pdq(2,1,2) + PDQ(1,1,1)),
+    hw_multi = ETS(Turnover ~ error("M") + trend("A") + season("M"))
+        )
+all_model_fc <- all_model_fit %>%
+  forecast(h=24)
+
+all_model_fc  %>% 
+  autoplot(filter(fs_turnover, year(Month)>=2020), alpha=0.6)
+```
 
