@@ -1,0 +1,129 @@
+---
+title: "banana-quality-r"
+author: "Kevin. T"
+date: "2024-03-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## R Markdown
+```{r}
+banana_df <- read_csv("banana_quality.csv")
+head(banana_df)
+```
+
+## Dimension Reduction 
+Principle Component Analysis 
+
+```{r}
+library(ggcorrplot)
+banana_num <- banana_df %>%
+  select(-c(Quality))
+corr_matrix <- cor(banana_num)
+ggcorrplot(corr_matrix)
+```
+
+
+
+Variables are not closely correlated with exception.
+
+Now to standardise data: 
+```{r}
+# I will store sweetness in a separate variable
+sweetness = banana_df$Sweetness
+
+banana_std <- banana_df %>%
+  select(-c(Quality, Sweetness)) %>%
+  scale() %>% tibble
+```
+
+```{r}
+set.seed(123)
+n = nrow(banana_std)
+index <- sample(1:n,n*0.6)
+banana_train <- banana_std %>%
+  slice(index)
+banana_valid <- banana_std %>%
+  slice(-index)
+
+sweetness_train = sweetness[index]
+sweetness_valid = sweetness[-index]
+```
+
+
+Apply kNN with k = 3 to predict the sweetness of bananas in validation sample. 
+
+```{r}
+library(FNN)
+
+knn_k3_pred = knn.reg(train = as.matrix(banana_train),
+                      test = as.matrix(banana_valid),
+                      y = as.matrix(sweetness_train),
+                      k = 3)
+```
+
+```{r}
+library(forecast)
+round(accuracy(knn_k3_pred$pred,sweetness_valid),1)
+```
+Finding optimal K
+
+```{r}
+K = 1:50
+RMSEall = numeric(length(K))
+for (k in K){
+  knn_kk_pred = knn.reg(train = as.matrix(banana_train),
+                      test = as.matrix(banana_valid),
+                      y = sweetness_train,
+                      k=k)
+  
+  RMSEall[k] = accuracy(knn_kk_pred$pred, sweetness_valid)[2]
+                      
+}
+plot(K,RMSEall, type = 'l')
+
+
+```
+```{r}
+knn_k27_pred = knn.reg(train = as.matrix(banana_train),
+                      test = as.matrix(banana_valid),
+                      y = as.matrix(sweetness_train),
+                      k = 27)
+round(accuracy(knn_k27_pred$pred, sweetness_valid),1)
+```
+
+```{r}
+RMSEall
+```
+
+
+```{r}
+# banana_df %>%
+#   select(-Quality) %>%
+#   prcomp(scale. = TRUE) -> pcaout
+# summary(pcaout)
+# screeplot(pcaout, type = 'l')
+# pca_scores <- pcaout$x[, 1:5]
+# banana_pca <- cbind(banana_df, PCA1 = pca_scores[, 1], 
+#                     PCA2 = pca_scores[, 2],
+#                     PCA3)
+# head(banana_pca)
+```
+7 principal components shown.
+First principal component cumulative proportion 0.308, explaining only 30.8% of
+total variance alone. 
+
+Proportion of variance explained by first two PCs together 50.8%, but proportion
+of variance by second PC alone is 20%. 
+
+Proportion of variance explained by the first five PCs together is 88.69%. 
+
+
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
