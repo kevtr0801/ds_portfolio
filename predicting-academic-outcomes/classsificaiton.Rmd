@@ -1,0 +1,215 @@
+---
+title: "classification"
+author: "Kevin Tran"
+date: "2024-06-20"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(caret)
+```
+
+
+
+```{r}
+class_train <- pc_scores
+class_test <- pc_scores_test
+class_train = as.data.frame(class_train)
+class_train$Target <- train$Target
+#class_train$id <- train$id
+class_test = as.data.frame(class_test)
+class_test$id <- test$id
+```
+
+
+## EDA
+```{r}
+ggplot(train, aes(Target, fill = Target)) + 
+  geom_bar(width = 0.8, color="black") + 
+    geom_text(aes(label = ..count..), stat = "count",vjust=1.5, 
+              color="white", size = 3.6) + labs(title = "Count of Academic Outcomes") +
+  theme_bw() 
+
+```
+
+```{r}
+library(ggplot2)
+ggplot(train, aes(x = Course, y = Target, fill = Target)) +
+  geom_boxplot() +
+  theme_bw() +
+  labs(title = "Boxplot of Target by Course", x = "Course", y = "Target")
+```
+
+
+```{r}
+options(repr.plot.width=50, repr.plot.height=50)
+My_theme <- theme(
+    axis.text = element_text(size = 5, colour = "black"), 
+    axis.title = element_text(size = 5, colour = "black"),
+    axis.line = element_line(colour = "black"),
+    plot.title = element_text(size = 5, face = "bold"), 
+    strip.text = element_text(size = 5, colour = "black"), 
+    strip.background = element_rect(fill = "#E0EEE0"),
+    panel.background = element_blank(), 
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+)
+
+library(tidyverse)
+train %>% 
+  select(!Target) %>%  
+  pivot_longer(-id, names_to = "var", values_to = "value") %>% 
+  ggplot(aes(x = "", y = value)) +
+  geom_boxplot(fill = "#8968CD", outlier.colour = "#FFA07A") +
+  labs(title = "Features distributions",
+       y = "Value",
+       x = "") +
+  facet_wrap((~ var), scales = "free") +
+  My_theme
+
+```
+
+
+```{r}
+library(caret)
+set.seed(1000)
+training.samples <- class_train$Target %>% createDataPartition(p = 0.7, list = F)
+train.data <- class_train[training.samples, ]
+test.data <- class_train[-training.samples, ]
+
+```
+
+
+## Decision Tree
+```{r}
+library(rpart)
+library(rpart.plot)
+tree <- rpart(Target ~., data = train.data, method = 'class', cp = 0.005, minsplit = 10)
+rpart.plot(tree)
+```
+
+```{r}
+set.seed(1000)
+tree_cp <- rpart(Target ~ ., data = train.data, method = "class", cp = 0)
+tree_cp$cptable
+```
+
+```{r}
+prunedTree = prune(tree_cp, cp = tree_cp$table[which.min(tree_cp$cptable[,"xerror"]), "CP"])
+```
+
+```{r}
+point_pred_tree <- predict(tree, newdata = test.data, type = "class")
+point_pred_prune <- predict(prunedTree, newdata= test.data, type = "class")
+
+pred_accuracy_tree <- confusionMatrix(point_pred_tree, as.factor(test.data$Target))
+pred_accuracy_pruned <- confusionMatrix(point_pred_prune, as.factor(test.data$Target))
+
+
+```
+
+```{r}
+pred_accuracy_tree
+pred_accuracy_pruned
+```
+
+
+## Support Vector Machine
+```{r}
+library(e1071)
+train.data$Target = as.factor(train.data$Target)
+svmLinear = svm(Target~.,
+                    data = train.data,
+                    kernel ="linear",
+                    cost = 1,scale =TRUE)
+```
+
+```{r}
+svmPolynomial = svm(Target~.,
+                    data = train.data,
+                    kernel ="polynomial",
+                    cost = 1,scale =TRUE)
+
+```
+
+```{r}
+svmRadiall = svm(Target~.,
+                    data = train.data,
+                    kernel ="radial",
+                    cost = 1,scale =TRUE)
+```
+
+```{r}
+train.data$Target = as.factor(train.data$Target)
+test.data$Target = as.factor(test.data$Target)
+```
+
+
+```{r}
+predlinear = predict(svmLinear,test.data)
+predpolyno = predict(svmPolynomial,test.data)
+predradial = predict(svmRadiall,test.data)
+# Then we can compute the accuracy from the confusion matrices
+AccLinear = confusionMatrix(predlinear,test.data$Target)$overall['Accuracy']
+AccPolyno = confusionMatrix(predpolyno,test.data$Target)$overall['Accuracy']
+AccRadial = confusionMatrix(predradial,test.data$Target)$overall['Accuracy']
+print(cbind(AccLinear,AccPolyno,AccRadial))
+```
+```{r}
+class_train$Target = as.factor(class_train$Target)
+# class_test$Target = as.factor(class_test$Target)
+
+model2 = svm(Target~.,
+                    data = class_train,
+                    kernel ="radial",
+                    cost = 1,scale =TRUE)
+
+pred.label2 <- predict(model2, class_test, type="prob")
+# put these predicted labels in a csv file that you can use to commit to the Kaggle Leaderboard
+# Finding the class with the maximum probability
+predicted_labels2 <- apply(pred.label2, 1, function(x) names(x)[which.max(x)])
+submission <- data.frame(id = class_test$id, Target = pred.label2)
+
+# Write the submission data frame to a CSV file, without row names
+write.csv(submission, "test_submission2.csv", row.names = FALSE)
+```
+
+
+With Tuning
+```{r}
+svm_cv_radial = tune(svm,
+                     Target~.,
+                     data=train.data,
+                     kernel="radial",
+                      ranges=list(cost=c(1,50,100,150)))
+svm_best_radial = svm_cv_radial$best.model
+```
+
+```{r}
+pred_best_svmradial = predict(svm_best_radial,test.data)
+Cross_Validation_svmradial =confusionMatrix(pred_best_svmradial,test.data$Target)$overall['Accuracy']
+```
+
+
+```{r}
+model = rpart(Target ~ ., data = class_train, method = "class", cp = 0)
+pred.label <- predict(model, class_test, type="prob")
+# put these predicted labels in a csv file that you can use to commit to the Kaggle Leaderboard
+# Finding the class with the maximum probability
+predicted_labels <- apply(pred.label, 1, function(x) names(x)[which.max(x)])
+submission <- data.frame(id = class_test$id, Target = predicted_labels)
+
+# Write the submission data frame to a CSV file, without row names
+write.csv(submission, "test_submission.csv", row.names = FALSE)
+```
+
+```{r}
+# Ensure that you are applying the function over the rows
+predicted_labels <- apply(pred.label, 1, function(x) names(x)[which.max(x)])
+
+# Check the length of predicted_labels to ensure it matches the number of test instances
+print(length(predicted_labels))  # Should output 51012
+
+```
+
