@@ -10,8 +10,6 @@ library(tidyverse)
 library(caret)
 ```
 
-
-
 ```{r}
 class_train <- pc_scores
 class_test <- pc_scores_test
@@ -21,6 +19,88 @@ class_train$Target <- train$Target
 class_test = as.data.frame(class_test)
 class_test$id <- test$id
 ```
+
+```{r}
+class_train$Target = as.factor(class_train$Target)
+train2 = class_train
+test2 = class_test
+y = train2$Target
+train2$Target <- NULL
+```
+
+
+
+
+```{r}
+set.seed(1000)
+n = nrow(train2)
+index <- sample(1:n, 350)
+train2 %>%
+  slice(index) -> trainTrain
+train2 %>%
+  slice(-index) -> trainTest
+TargetTrain = y[index]
+TargetTest = y[-index]
+```
+
+
+```{r}
+library(FNN)
+library(MLmetrics)
+# Define the range of k values to try
+K = 1:100
+f1_scores = numeric(length(K))
+
+for (k in K) {
+  knn_best_k = knn(train = trainTrain,
+                   test = trainTest,
+                   cl = TargetTrain,
+                   k = k)
+  knn_best_k_num <- as.numeric(as.factor(knn_best_k))
+  perfect_MHTest_num <- as.numeric(as.factor(TargetTest))
+    
+  f1_scores[k] = F1_Score(knn_best_k, TargetTest)
+}
+
+plot(K,f1_scores,type='l')
+```
+
+```{r}
+best_k = K[which.max(f1_scores)]
+best_k 
+```
+
+```{r}
+knn_k24 <- knn(train = trainTrain,
+               test = trainTest,
+               cl = TargetTrain,
+               k=best_k)
+
+accuracy_knn <- confusionMatrix(knn_k24, TargetTest) #----Confucion Matrix -----
+actual_knn24 <- TargetTest
+knn24_f1 <- F1_Score(knn_k24, actual_knn24) #-----F1 Score-----
+knn24_f1
+accuracy_knn
+```
+
+```{r}
+pred.label <- knn(train2,
+                  test = test2%>%select(-id),
+                  cl = y,
+                  k =best_k)
+
+
+
+```
+
+```{r}
+submission <- data.frame(id = class_test$id, Target = pred.label)
+
+# Write the submission data frame to a CSV file, without row names
+write.csv(submission, "test_submission23.csv", row.names = FALSE)
+```
+```
+
 
 
 ## EDA
@@ -33,13 +113,6 @@ ggplot(train, aes(Target, fill = Target)) +
 
 ```
 
-```{r}
-library(ggplot2)
-ggplot(train, aes(x = Course, y = Target, fill = Target)) +
-  geom_boxplot() +
-  theme_bw() +
-  labs(title = "Boxplot of Target by Course", x = "Course", y = "Target")
-```
 
 
 ```{r}
@@ -70,6 +143,90 @@ train %>%
 
 ```
 
+
+
+```{r}
+library(FNN)
+library(MLmetrics)
+# Define the range of k values to try
+K = 1:50
+f1_scores = numeric(length(K))
+
+for (k in K) {
+  knn_best_k = knn(train = trainTrain,
+                   test = trainTest,
+                   cl = perfect_TargetTrain,
+                   k = k)
+  knn_best_k_num <- as.numeric(as.factor(knn_best_k))
+  perfect_MHTest_num <- as.numeric(as.factor(perfect_TargetTest))
+    
+  f1_scores[k] = F1_Score(knn_best_k, perfect_TargetTest)
+}
+
+plot(K,f1_scores,type='l')
+```
+
+```{r}
+best_k = K[which.max(f1_scores)]
+best_k
+```
+
+```{r}
+knn_k24 <- knn(train = trainTrain,
+               test = trainTest,
+               cl = perfect_TargetTrain,
+               k=best_k)
+
+accuracy_knn <- confusionMatrix(knn_k24, perfect_TargetTest) #----Confucion Matrix -----
+actual_knn24 <- perfect_TargetTest
+knn24_f1 <- F1_Score(knn_k24, actual_knn24) #-----F1 Score-----
+knn24_f1
+accuracy_knn
+```
+
+```{r}
+accuracy_knn <- confusionMatrix(knn_k24, perfect_TargetTest) #----Confucion Matrix -----
+actual_knn24 <- perfect_TargetTest
+knn24_f1 <- F1_Score(knn_k24, actual_knn24) #-----F1 Score-----
+knn24_f1
+```
+
+```{r}
+accuracy_knn
+```
+
+```{r}
+train2 = class_train
+train2$Target <- NULL
+test2 = class_test
+pred.label <- knn(train2,
+                  test = test2,
+                  cl = y,
+                  k =best_k)
+submission <- data.frame(id = class_test$id, Target = pred.label)
+
+# Write the submission data frame to a CSV file, without row names
+write.csv(submission, "test_submission2.csv", row.names = FALSE)
+```
+
+```{r}
+class_train$Target = as.factor(class_train$Target)
+# class_test$Target = as.factor(class_test$Target)
+
+model2 = svm(Target~.,
+                    data = class_train,
+                    kernel ="radial",
+                    cost = 1,scale =TRUE)
+
+pred.label2 <- predict(model2, class_test, type="prob")
+# put these predicted labels in a csv file that you can use to commit to the Kaggle Leaderboard
+# Finding the class with the maximum probability
+predicted_labels2 <- apply(pred.label2, 1, function(x) names(x)[which.max(x)])
+submission <- data.frame(id = class_test$id, Target = pred.label2)
+
+# Write the submission data frame to a CSV file, without row names
+write.csv(submission, "test_submission2.csv", row.names = FALSE)
+```
 
 ```{r}
 library(caret)
@@ -156,6 +313,7 @@ AccPolyno = confusionMatrix(predpolyno,test.data$Target)$overall['Accuracy']
 AccRadial = confusionMatrix(predradial,test.data$Target)$overall['Accuracy']
 print(cbind(AccLinear,AccPolyno,AccRadial))
 ```
+
 ```{r}
 class_train$Target = as.factor(class_train$Target)
 # class_test$Target = as.factor(class_test$Target)
