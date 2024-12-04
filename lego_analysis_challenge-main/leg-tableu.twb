@@ -1,0 +1,256 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build 20243.24.1112.0850                               -->
+<workbook original-version='18.1' source-build='2024.3.1 (20243.24.1112.0850)' source-platform='win' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <AnimationOnByDefault />
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SheetIdentifierTracking />
+    <_.fcp.VConnDownstreamExtractsWithWarnings.true...VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <preferences>
+    <preference name='ui.encoding.shelf.height' value='24' />
+    <preference name='ui.shelf.height' value='26' />
+  </preferences>
+  <datasources>
+    <datasource caption='colors (staging.colors) (lego)' inline='true' name='federated.1fe021z19lr1jt1e5qjn305n1yb4' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='localhost' name='postgres.0ymrfw1189bteq16j20dm0z1wt41'>
+            <connection authentication='username-password' class='postgres' dbname='lego' one-time-sql='' port='5432' server='localhost' username='postgres' />
+          </named-connection>
+        </named-connections>
+        <relation connection='postgres.0ymrfw1189bteq16j20dm0z1wt41' name='colors' table='[staging].[colors]' type='table' />
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>id</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[id]</local-name>
+            <parent-name>[colors]</parent-name>
+            <remote-alias>id</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>19</precision>
+            <contains-null>true</contains-null>
+            <object-id>[colors (staging.colors)_43BB40B5503747248A13A998A1B5AEDF]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>name</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[name]</local-name>
+            <parent-name>[colors]</parent-name>
+            <remote-alias>name</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <width>2147483647</width>
+            <contains-null>true</contains-null>
+            <cast-to-local-type>true</cast-to-local-type>
+            <collation flag='0' name='LEN_RUS' />
+            <attributes>
+              <attribute datatype='string' name='TypeIsVarchar'>&quot;true&quot;</attribute>
+            </attributes>
+            <object-id>[colors (staging.colors)_43BB40B5503747248A13A998A1B5AEDF]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>rgb</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[rgb]</local-name>
+            <parent-name>[colors]</parent-name>
+            <remote-alias>rgb</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <width>2147483647</width>
+            <contains-null>true</contains-null>
+            <cast-to-local-type>true</cast-to-local-type>
+            <collation flag='0' name='LEN_RUS' />
+            <attributes>
+              <attribute datatype='string' name='TypeIsVarchar'>&quot;true&quot;</attribute>
+            </attributes>
+            <object-id>[colors (staging.colors)_43BB40B5503747248A13A998A1B5AEDF]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>is_trans</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[is_trans]</local-name>
+            <parent-name>[colors]</parent-name>
+            <remote-alias>is_trans</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <width>2147483647</width>
+            <contains-null>true</contains-null>
+            <cast-to-local-type>true</cast-to-local-type>
+            <collation flag='0' name='LEN_RUS' />
+            <attributes>
+              <attribute datatype='string' name='TypeIsVarchar'>&quot;true&quot;</attribute>
+            </attributes>
+            <object-id>[colors (staging.colors)_43BB40B5503747248A13A998A1B5AEDF]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='colors' datatype='table' name='[__tableau_internal_object_id__].[colors (staging.colors)_43BB40B5503747248A13A998A1B5AEDF]' role='measure' type='quantitative' />
+      <column caption='Id' datatype='integer' name='[id]' role='dimension' type='ordinal' />
+      <column caption='Is Trans' datatype='string' name='[is_trans]' role='dimension' type='nominal' />
+      <column caption='Name' datatype='string' name='[name]' role='dimension' type='nominal' />
+      <column caption='Rgb' datatype='string' name='[rgb]' role='dimension' type='nominal' />
+      <extract _.fcp.VConnDownstreamExtractsWithWarnings.true...user-specific='false' count='-1' enabled='true' object-id='' units='records'>
+        <connection access_mode='readonly' authentication='auth-none' author-locale='en_US' class='hyper' dbname='C:/Users/KT/Documents/ds_portfolio/lego_analysis_challenge-main/colors (staging.colors) (lego).hyper' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='12/04/2024 03:20:25 AM' username='tableau_internal_user'>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='colors (staging.colors) (lego)' increment-value='%null%' refresh-type='create' rows-inserted='135' timestamp-start='2024-12-04 03:20:25.043' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>id</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[id]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>id</remote-alias>
+              <ordinal>0</ordinal>
+              <family>colors</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>135</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[colors (staging.colors)_43BB40B5503747248A13A998A1B5AEDF]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>name</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[name]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>name</remote-alias>
+              <ordinal>1</ordinal>
+              <family>colors</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>135</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='LEN_RUS' />
+              <object-id>[colors (staging.colors)_43BB40B5503747248A13A998A1B5AEDF]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>rgb</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[rgb]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>rgb</remote-alias>
+              <ordinal>2</ordinal>
+              <family>colors</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>124</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='LEN_RUS' />
+              <object-id>[colors (staging.colors)_43BB40B5503747248A13A998A1B5AEDF]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>is_trans</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[is_trans]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>is_trans</remote-alias>
+              <ordinal>3</ordinal>
+              <family>colors</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>2</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='LEN_RUS' />
+              <object-id>[colors (staging.colors)_43BB40B5503747248A13A998A1B5AEDF]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;Australia&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='colors' id='colors (staging.colors)_43BB40B5503747248A13A998A1B5AEDF'>
+            <properties context=''>
+              <relation connection='postgres.0ymrfw1189bteq16j20dm0z1wt41' name='colors' table='[staging].[colors]' type='table' />
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <worksheets>
+    <worksheet name='Sheet 1'>
+      <table>
+        <view>
+          <datasources />
+          <aggregation value='true' />
+        </view>
+        <style />
+        <panes>
+          <pane selection-relaxation-option='selection-relaxation-allow'>
+            <view>
+              <breakdown value='auto' />
+            </view>
+            <mark class='Automatic' />
+          </pane>
+        </panes>
+        <rows />
+        <cols />
+      </table>
+      <simple-id uuid='{14A43302-9C26-40E6-96C6-D290637EF540}' />
+    </worksheet>
+  </worksheets>
+  <windows source-height='30'>
+    <window class='worksheet' maximized='true' name='Sheet 1'>
+      <cards>
+        <edge name='left'>
+          <strip size='160'>
+            <card type='pages' />
+            <card type='filters' />
+            <card type='marks' />
+          </strip>
+        </edge>
+        <edge name='top'>
+          <strip size='2147483647'>
+            <card type='columns' />
+          </strip>
+          <strip size='2147483647'>
+            <card type='rows' />
+          </strip>
+          <strip size='31'>
+            <card type='title' />
+          </strip>
+        </edge>
+      </cards>
+      <simple-id uuid='{4E352BF0-6B8D-424B-8484-4115258B7EBA}' />
+    </window>
+  </windows>
+  <thumbnails>
+    <thumbnail height='192' name='Sheet 1' width='192'>
+      iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAACXBIWXMAAA7DAAAOwwHHb6hk
+      AAACFUlEQVR4nO3TMQEAIAzAMMC/5yFjRxMFfXpnZg5Eve0A2GQA0gxAmgFIMwBpBiDNAKQZ
+      gDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFI
+      MwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQD
+      kGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBp
+      BiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA
+      0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDN
+      AKQZgDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxA
+      mgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDNAKQZ
+      gDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFI
+      MwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDNAKQZgDQDkGYA0gxAmgFIMwBpBiDNAKR9Y+0F
+      fBUOM1sAAAAASUVORK5CYII=
+    </thumbnail>
+  </thumbnails>
+</workbook>
