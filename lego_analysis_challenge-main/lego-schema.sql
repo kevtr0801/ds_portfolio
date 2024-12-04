@@ -118,8 +118,6 @@ INSERT INTO analysis.parts(
 	WHERE P.part_num is NULL
 );
 
-
-
 -- Alter table
 ALTER TABLE analysis.colors ADD PRIMARY KEY (id);
 ALTER TABLE analysis.inventories ADD PRIMARY KEY (id);
@@ -149,7 +147,6 @@ ALTER TABLE analysis.inventory_sets ADD FOREIGN KEY (set_num)
 
 ALTER TABLE analysis.sets ADD FOREIGN KEY (theme_id)
 	REFERENCES analysis.themes(id);
-
 
 ALTER TABLE analysis.inventories ADD FOREIGN KEY (set_num)
 	REFERENCES analysis.sets(set_num);
